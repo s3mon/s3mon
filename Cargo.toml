@@ -1,0 +1,23 @@
+[package]
+name = "s3mon"
+version = "0.1.1"
+authors = ["Nicolas Embriz <nbari@tequila.io>"]
+description = "command line tool for storing streams of data in s3 buckets"
+documentation = "https://s3mon.dev"
+homepage = "https://s3mon.dev"
+readme = "README.md"
+keywords = ["s3", "files", "backup", "monitor", "bucket"]
+categories = ["command-line-utilities", "command-line-interface"]
+license-file = "LICENSE"
+edition = "2018"
+
+[dependencies]
+chrono = "0.4"
+clap = "2"
+futures = "0.1.29"
+rusoto_core = "0.40.0"
+rusoto_credential = "0.40.0"
+rusoto_s3 = "0.40.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+slack-hook = "0.7"
