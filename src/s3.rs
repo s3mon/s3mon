@@ -1,10 +1,9 @@
+use crate::auth;
+use crate::config;
 use chrono::prelude::{DateTime, Utc};
 use rusoto_core::request::HttpClient;
 use rusoto_core::Region;
-use rusoto_s3::{ListObjectsV2Request, S3Client, S3};
-
-use crate::auth;
-use crate::config;
+use rusoto_s3::{ListObjectsV2Output, ListObjectsV2Request, S3Client, S3};
 
 pub struct S3monS3 {
     s3: S3Client,
@@ -64,43 +63,40 @@ impl S3monS3 {
         }
     }
 
-    pub fn objects(&self) -> String {
+    pub fn objects(&self) -> Result<Vec<rusoto_s3::Object>, String> {
         let now = Utc::now();
-        //        let until = now - chrono::Duration::minutes(1);
-        let after = now - chrono::Duration::hours(12);
-        //  let window = after.time()..until.time();
-        // let today = now.format("%Y/%m/%d").to_string();
-        // let date_path = format!("{}/{}", path, today);
+        let age = now - chrono::Duration::hours(12);
 
-        let objects = self
-            .s3
-            .list_objects_v2(ListObjectsV2Request {
-                bucket: "test".to_owned(),
-//                prefix: Some(prefix),
-                ..ListObjectsV2Request::default()
-            })
-            .sync()
-            .unwrap()
-            .contents
-            .unwrap_or_default()
-            .into_iter()
-            .filter(move |obj| {
-                DateTime::parse_from_rfc3339(obj.last_modified.clone().unwrap_or_default().as_str())
-                    .ok()
+        let list_objects_req = ListObjectsV2Request {
+            bucket: "test".to_owned(),
+            //                prefix: Some(prefix),
+            ..Default::default()
+        };
+
+        let objects = match self.s3.list_objects_v2(list_objects_req).sync() {
+            // loop over the results parsing the last_modified and converting
+            // to unix timestamp and then return only objects < the defined age
+            Ok(result) => {
+                result
+                    .contents
+                    .unwrap_or_default()
                     .into_iter()
-                    .map(|parsed| parsed.time())
-                    .any(|last_modified| {
-                        println!("last_modified {}, after: {}", last_modified, after.time());
-                        //after.time() < last_modified && last_modified < until.time()
-                        after.time() < last_modified
+                    .filter(move |obj| {
+                        DateTime::parse_from_rfc3339(
+                            obj.last_modified.clone().unwrap_or_default().as_str(),
+                        )
+                        .ok()
+                        .into_iter()
+                        .map(|parsed| parsed.timestamp())
+                        .any(|last_modified| {
+                            //after.time() < last_modified && last_modified < until.time()
+                            last_modified > age.timestamp()
+                        })
                     })
-            })
-            .collect::<Vec<_>>();
-        println!("found {} objects", objects.len());
-         let mut string = String::new();
-        for o in objects {
-            string.push_str(format!("{} - {}\n", o.key.unwrap(), o.size.unwrap()).as_str());
-        }
-        return string
+                    .collect::<Vec<_>>()
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+        Ok(objects)
     }
 }

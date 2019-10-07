@@ -7,9 +7,9 @@ use std::{
 
 mod auth;
 mod config;
+mod envs;
 mod s3;
 mod slack;
-mod envs;
 
 fn main() {
     let matches = App::new("s3mon")
@@ -46,8 +46,10 @@ fn main() {
     loop {
         let start = Instant::now();
         let wait_time = Duration::from_secs(30);
-        let objects = s3.objects();
-        slack::send_msg(objects);
+        if let Ok(objects) = s3.objects() {
+            println!("{:?}", objects);
+            //    slack::send_msg(objects);
+        }
         let runtime = start.elapsed();
         if let Some(remaining) = wait_time.checked_sub(runtime) {
             thread::sleep(remaining);
