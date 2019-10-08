@@ -35,9 +35,10 @@ impl S3monS3 {
         &self,
         bucket: String,
         prefix: String,
+        age: i64,
     ) -> Result<Vec<rusoto_s3::Object>, String> {
         let now = Utc::now();
-        let age = now - chrono::Duration::hours(12);
+        let age = now - chrono::Duration::seconds(age);
 
         let list_objects_req = ListObjectsV2Request {
             bucket: bucket.to_owned(),

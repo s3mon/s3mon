@@ -19,5 +19,7 @@ pub struct Data {
 #[derive(Debug, Deserialize)]
 pub struct Object {
     pub prefix: String,
-    pub age: u32,
+    pub age: i64,
+    #[serde(default)]
+    pub size: u64,
 }

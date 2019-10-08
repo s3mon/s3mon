@@ -1,9 +1,5 @@
 use clap::{App, Arg};
 use serde_yaml;
-use std::{
-    thread,
-    time::{Duration, Instant},
-};
 
 mod auth;
 mod config;
@@ -43,36 +39,28 @@ fn main() {
 
     let s3 = s3::S3monS3::new(&yml);
 
-    let mut buckets = yml.s3mon.buckets.into_iter();
-    loop {
-        match buckets.next() {
-            Some(bucket) => {
-                println!("{}", bucket.0);
-                for o in bucket.1 {
-                    println!("{:?}", o);
+    for bucket in yml.s3mon.buckets {
+        for file in bucket.1 {
+            if let Ok(objects) = s3.objects(bucket.0.to_string(), file.prefix, file.age) {
+                for o in objects {
+                    if file.size > 0 {
+                        if let Some(size) = o.size {
+                            println!("{}", size);
+                        }
+                    }
+                    if let Some(key) = o.key {
+                        println!("key: {}", key);
+                    }
+                    if let Some(lm) = o.last_modified {
+                        println!("lm: {}", lm);
+                    }
+                    if let Some(size) = o.size {
+                        println!("size: {}", size);
+                    }
                 }
             }
-            None => break,
         }
     }
-
-    //    println!("{:?}", &yml);
-
-    /*
-    loop {
-        let start = Instant::now();
-        let wait_time = Duration::from_secs(30);
-        if let Ok(objects) = s3.objects() {
-            //println!("{:?}", objects);
-            println!("{}", objects.len());
-            //    slack::send_msg(objects);
-        }
-        let runtime = start.elapsed();
-        if let Some(remaining) = wait_time.checked_sub(runtime) {
-            thread::sleep(remaining);
-        }
-    }
-    */
 }
 
 fn is_file(s: String) -> Result<(), String> {

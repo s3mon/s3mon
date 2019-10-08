@@ -5,7 +5,7 @@ s3mon:
   secret_key: SECRET_ACCESS_KEY
   buckets:
     bucket_A:
-      - file: starts_with_foo
+      - prefix: test
         age: 86400
         size: 30720
     bucket_B:
