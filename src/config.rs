@@ -21,5 +21,5 @@ pub struct Object {
     pub prefix: String,
     pub age: i64,
     #[serde(default)]
-    pub size: u64,
+    pub size: i64,
 }

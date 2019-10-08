@@ -40,25 +40,35 @@ fn main() {
     let s3 = s3::S3monS3::new(&yml);
 
     for bucket in yml.s3mon.buckets {
+        let bucket_name = bucket.0.to_string();
         for file in bucket.1 {
-            if let Ok(objects) = s3.objects(bucket.0.to_string(), file.prefix, file.age) {
+            let mut output: Vec<String> = Vec::new();
+            output.push(format!(
+                "{},prefix={}",
+                bucket_name.clone(),
+                file.prefix.clone()
+            ));
+            let mut exist = false;
+            let mut size_mismatch = false;
+            if let Ok(objects) = s3.objects(bucket_name.clone(), file.prefix.clone(), file.age) {
+                if objects.len() > 0 {
+                    exist = true;
+                }
                 for o in objects {
                     if file.size > 0 {
                         if let Some(size) = o.size {
-                            println!("{}", size);
+                            if size < file.size {
+                                size_mismatch = true;
+                            }
                         }
-                    }
-                    if let Some(key) = o.key {
-                        println!("key: {}", key);
-                    }
-                    if let Some(lm) = o.last_modified {
-                        println!("lm: {}", lm);
-                    }
-                    if let Some(size) = o.size {
-                        println!("size: {}", size);
                     }
                 }
             }
+            output.push(format!("exist={}", exist));
+            if size_mismatch {
+                output.push("size_mismatch=1".to_string());
+            }
+            println!("{}", output.join(" "));
         }
     }
 }
