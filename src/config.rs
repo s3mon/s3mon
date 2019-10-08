@@ -1,12 +1,12 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub s3mon: Data,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct Data {
     pub endpoint: String,
     pub access_key: String,
@@ -18,6 +18,6 @@ pub struct Data {
 
 #[derive(Debug, Deserialize)]
 pub struct Object {
-    pub file: String,
+    pub prefix: String,
     pub age: u32,
 }

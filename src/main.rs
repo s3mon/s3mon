@@ -41,13 +41,30 @@ fn main() {
         Ok(yml) => yml,
     };
 
-    let s3 = s3::S3monS3::new(yml);
+    let s3 = s3::S3monS3::new(&yml);
 
+    let mut buckets = yml.s3mon.buckets.into_iter();
+    loop {
+        match buckets.next() {
+            Some(bucket) => {
+                println!("{}", bucket.0);
+                for o in bucket.1 {
+                    println!("{:?}", o);
+                }
+            }
+            None => break,
+        }
+    }
+
+    //    println!("{:?}", &yml);
+
+    /*
     loop {
         let start = Instant::now();
         let wait_time = Duration::from_secs(30);
         if let Ok(objects) = s3.objects() {
-            println!("{:?}", objects);
+            //println!("{:?}", objects);
+            println!("{}", objects.len());
             //    slack::send_msg(objects);
         }
         let runtime = start.elapsed();
@@ -55,6 +72,7 @@ fn main() {
             thread::sleep(remaining);
         }
     }
+    */
 }
 
 fn is_file(s: String) -> Result<(), String> {
