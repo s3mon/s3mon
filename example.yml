@@ -1,6 +1,6 @@
 ---
 s3mon:
-  endpoint: s3.provider
+  endpoint: s3.provider.tld
   access_key: ACCESS_KEY_ID
   secret_key: SECRET_ACCESS_KEY
   buckets:
@@ -9,8 +9,8 @@ s3mon:
         age: 86400
         size: 30720
     bucket_B:
-      - file: file
+      - prefix: foo
         age: 43200
         size: 1024
-      - file: exact_file_name
+      - prefix: path/start/with/test
         age: 43200
