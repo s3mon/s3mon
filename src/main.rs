@@ -1,5 +1,7 @@
 use clap::{App, Arg};
 use serde_yaml;
+use std::sync::Arc;
+use std::thread;
 
 mod auth;
 mod config;
@@ -37,40 +39,49 @@ fn main() {
         Ok(yml) => yml,
     };
 
-    let s3 = s3::S3monS3::new(&yml);
+    let s3 = Arc::new(s3::S3monS3::new(&yml));
 
+    let mut children = vec![];
     for bucket in yml.s3mon.buckets {
         let bucket_name = bucket.0.to_string();
         for file in bucket.1 {
-            let mut output: Vec<String> = Vec::new();
-            output.push(format!(
-                "{},prefix={}",
-                bucket_name.clone(),
-                file.prefix.clone()
-            ));
-            let mut exist = false;
-            let mut size_mismatch = false;
-            if let Ok(objects) = s3.objects(bucket_name.clone(), file.prefix.clone(), file.age) {
-                if objects.len() > 0 {
-                    exist = true;
-                }
-                for o in objects {
-                    if file.size > 0 {
-                        if let Some(size) = o.size {
-                            if size < file.size {
-                                size_mismatch = true;
-                            }
-                        }
+            let thread_s3 = Arc::clone(&s3);
+            let bucket = bucket_name.clone();
+            children.push(thread::spawn(|| {
+                check(thread_s3, bucket, file);
+            }));
+        }
+    }
+    for child in children {
+        // Wait for the thread to finish. Returns a result.
+        let _ = child.join();
+    }
+}
+
+fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
+    let mut output: Vec<String> = Vec::new();
+    output.push(format!("{},prefix={}", bucket, file.prefix));
+    let mut exist = false;
+    let mut size_mismatch = false;
+    if let Ok(objects) = s3.objects(bucket, file.prefix, file.age) {
+        if objects.len() > 0 {
+            exist = true;
+        }
+        for o in objects {
+            if file.size > 0 {
+                if let Some(size) = o.size {
+                    if size < file.size {
+                        size_mismatch = true;
                     }
                 }
             }
-            output.push(format!("exist={}", exist));
-            if size_mismatch {
-                output.push("size_mismatch=1".to_string());
-            }
-            println!("{}", output.join(" "));
         }
     }
+    output.push(format!("exist={}", exist));
+    if size_mismatch {
+        output.push("size_mismatch=1".to_string());
+    }
+    println!("{}", output.join(" "));
 }
 
 fn is_file(s: String) -> Result<(), String> {
