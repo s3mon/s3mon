@@ -9,11 +9,13 @@ pub struct Config {
 #[derive(Debug, Deserialize)]
 pub struct Data {
     pub endpoint: String,
-    pub access_key: String,
-    pub secret_key: String,
-    pub buckets: BTreeMap<String, Vec<Object>>,
     #[serde(default)]
     pub region: String,
+    #[serde(default)]
+    pub access_key: String,
+    #[serde(default)]
+    pub secret_key: String,
+    pub buckets: BTreeMap<String, Vec<Object>>,
 }
 
 #[derive(Debug, Deserialize)]

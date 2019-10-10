@@ -16,16 +16,14 @@ impl S3monS3 {
             config.s3mon.secret_key.to_string(),
         );
 
-        let region = Region::Custom {
-            name: config.s3mon.region.to_owned(),
-            endpoint: config.s3mon.endpoint.to_owned(),
-        };
-
         S3monS3 {
             s3: rusoto_s3::S3Client::new_with(
                 HttpClient::new().expect("failed to create request dispatcher"),
                 chain,
-                region,
+                Region::Custom {
+                    name: config.s3mon.region.to_owned(),
+                    endpoint: config.s3mon.endpoint.to_owned(),
+                },
             ),
         }
     }
