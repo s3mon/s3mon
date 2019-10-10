@@ -19,7 +19,12 @@ pub struct Data {
 #[derive(Debug, Deserialize)]
 pub struct Object {
     pub prefix: String,
+    #[serde(default = "default_age")]
     pub age: i64,
     #[serde(default)]
     pub size: i64,
+}
+
+fn default_age() -> i64 {
+    86400
 }
