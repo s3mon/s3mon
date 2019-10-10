@@ -6,7 +6,6 @@ pub fn send_msg(msg: String) {
 
     let slack = Slack::new(&*slack_url).unwrap();
 
-
     let p =  PayloadBuilder::new()
         .text("No files found")
         .channel("#backups")

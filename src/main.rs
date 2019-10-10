@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use serde_yaml;
 use std::sync::Arc;
-use std::thread;
+use std::{process, thread};
 
 mod auth;
 mod config;
@@ -27,14 +27,17 @@ fn main() {
     // Gets a value for config if supplied by user, or defaults to "default.conf"
     let config = matches
         .value_of("config")
-        .expect("Unable to open configuration file");
+        .unwrap_or_else(|| {
+            eprintln!("Unable to open configuration file, use (\"-h for help\")");
+            process::exit(1);
+    });
 
     // parse config file
     let file = std::fs::File::open(&config).expect("Unable to open file");
     let yml: config::Config = match serde_yaml::from_reader(file) {
         Err(err) => {
-            println!("Error: {}", err);
-            return;
+            eprintln!("Error: {}", err);
+            process::exit(1);
         }
         Ok(yml) => yml,
     };
