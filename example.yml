@@ -1,6 +1,7 @@
 ---
 s3mon:
-  endpoint: s3.provider.tld
+  endpoint: s3-eu-central-1.provider.tld
+  region: eu-central-1
   access_key: ACCESS_KEY_ID
   secret_key: SECRET_ACCESS_KEY
   buckets:

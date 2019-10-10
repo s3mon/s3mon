@@ -1,15 +1,19 @@
 use clap::{App, Arg};
+use env_logger;
 use serde_yaml;
 use std::sync::Arc;
 use std::{process, thread};
 
 mod auth;
 mod config;
-mod envs;
 mod s3;
 mod slack;
 
 fn main() {
+    // RUST_LOG=debug
+    let _ = env_logger::try_init();
+
+    // cli options
     let matches = App::new("s3mon")
         .version(env!("CARGO_PKG_VERSION"))
         .arg(
@@ -91,7 +95,6 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
         }
         Err(e) => {
             eprintln!("Error: {}", e);
-            process::exit(1);
         }
     }
 
