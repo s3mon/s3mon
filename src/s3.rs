@@ -3,7 +3,7 @@ use crate::config;
 use chrono::prelude::{DateTime, Utc};
 use rusoto_core::request::HttpClient;
 use rusoto_core::Region;
-use rusoto_s3::{ListObjectsV2Request, S3Client, S3};
+use rusoto_s3::{ListObjectsV2Request, Object, S3Client, S3};
 
 pub struct S3monS3 {
     s3: S3Client,
@@ -31,12 +31,7 @@ impl S3monS3 {
         }
     }
 
-    pub fn objects(
-        &self,
-        bucket: String,
-        prefix: String,
-        age: i64,
-    ) -> Result<Vec<rusoto_s3::Object>, String> {
+    pub fn objects(&self, bucket: String, prefix: String, age: i64) -> Result<Vec<Object>, String> {
         let now = Utc::now();
         let age = now - chrono::Duration::seconds(age);
 
