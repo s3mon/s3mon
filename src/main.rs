@@ -40,9 +40,12 @@ fn main() {
         Ok(yml) => yml,
     };
 
+    // create an S3 Client
     let s3 = Arc::new(s3::S3monS3::new(&yml));
 
+    // store all threads
     let mut children = vec![];
+
     for bucket in yml.s3mon.buckets {
         let bucket_name = bucket.0.to_string();
         for file in bucket.1 {
@@ -53,35 +56,51 @@ fn main() {
             }));
         }
     }
+
+    // Wait for all the threads to finish
     for child in children {
-        // Wait for the thread to finish. Returns a result.
         let _ = child.join();
     }
 }
 
 fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
     let mut output: Vec<String> = Vec::new();
+
+    // create InfluxDB line protocol
+    // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
     output.push(format!("{},prefix={}", bucket, file.prefix));
+
     let mut exist = false;
     let mut size_mismatch = false;
-    if let Ok(objects) = s3.objects(bucket, file.prefix, file.age) {
-        if objects.len() > 0 {
-            exist = true;
-        }
-        for o in objects {
-            if file.size > 0 {
-                if let Some(size) = o.size {
-                    if size < file.size {
-                        size_mismatch = true;
+
+    // query the bucket
+    match s3.objects(bucket, file.prefix, file.age) {
+        Ok(objects) => {
+            if objects.len() > 0 {
+                exist = true;
+            }
+            for o in objects {
+                if file.size > 0 {
+                    if let Some(size) = o.size {
+                        if size < file.size {
+                            size_mismatch = true;
+                        }
                     }
                 }
             }
         }
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
     }
+
     output.push(format!("exist={}", exist));
+
     if size_mismatch {
         output.push("size_mismatch=1".to_string());
     }
+
     println!("{}", output.join(" "));
 }
 

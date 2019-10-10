@@ -17,8 +17,7 @@ impl S3monS3 {
         );
 
         let region = Region::Custom {
-            // TODO
-            name: "s3mon".to_owned(),
+            name: config.s3mon.region.to_owned(),
             endpoint: config.s3mon.endpoint.to_owned(),
         };
 
