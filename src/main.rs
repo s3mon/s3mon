@@ -117,3 +117,60 @@ fn is_file(s: String) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_config() -> Result<(), serde_yaml::Error> {
+        let yml = r#"
+---
+s3mon:
+  endpoint: endpoint
+  region: region
+  access_key: ACCESS_KEY_ID
+  secret_key: SECRET_ACCESS_KEY
+  buckets:
+    bucket_A:
+      - prefix: foo
+        age: 43200
+      - prefix: bar
+      - prefix: baz
+        size: 1024
+"#;
+        let mut buckets = std::collections::BTreeMap::new();
+        buckets.insert(
+            "bucket_A".to_string(),
+            vec![
+                config::Object {
+                    prefix: "foo".to_string(),
+                    age: 43200,
+                    size: 0,
+                },
+                config::Object {
+                    prefix: "bar".to_string(),
+                    age: 86400,
+                    size: 0,
+                },
+                config::Object {
+                    prefix: "baz".to_string(),
+                    age: 86400,
+                    size: 1024,
+                },
+            ],
+        );
+        let cfg = config::Config {
+            s3mon: config::Data {
+                endpoint: "endpoint".to_string(),
+                region: "region".to_string(),
+                access_key: "ACCESS_KEY_ID".to_string(),
+                secret_key: "SECRET_ACCESS_KEY".to_string(),
+                buckets: buckets,
+            },
+        };
+        let y: config::Config = serde_yaml::from_str(yml)?;
+        assert_eq!(cfg, y);
+        Ok(())
+    }
+}

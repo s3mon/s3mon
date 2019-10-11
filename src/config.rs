@@ -1,12 +1,12 @@
 use serde::Deserialize;
 use std::collections::BTreeMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct Config {
     pub s3mon: Data,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct Data {
     #[serde(default)]
     pub endpoint: String,
@@ -19,7 +19,7 @@ pub struct Data {
     pub buckets: BTreeMap<String, Vec<Object>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
 pub struct Object {
     pub prefix: String,
     #[serde(default = "default_age")]
