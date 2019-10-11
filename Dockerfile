@@ -1,4 +1,4 @@
-FROM rust:1.38
+FROM rust:latest
 WORKDIR /usr/src/s3mon
 COPY . .
 RUN cargo build --release
