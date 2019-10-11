@@ -68,14 +68,14 @@ fn main() {
 }
 
 fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
-    let mut output: Vec<String> = Vec::new();
-
     // create InfluxDB line protocol
     // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
+    let mut output: Vec<String> = Vec::new();
     output.push(format!("{},prefix={}", bucket, file.prefix));
 
     let mut exist = false;
     let mut size_mismatch = false;
+    let mut bucket_error = false;
 
     // query the bucket
     match s3.objects(bucket, file.prefix, file.age) {
@@ -95,14 +95,14 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
         }
         Err(e) => {
             eprintln!("Error: {}", e);
+            bucket_error = true;
         }
     }
 
-    output.push(format!("exist={}", exist));
-
-    if size_mismatch {
-        output.push("size_mismatch=1".to_string());
-    }
+    output.push(format!(
+        "error={} exist={} size_mismatch={}",
+        bucket_error, exist, size_mismatch
+    ));
 
     println!("{}", output.join(" "));
 }
