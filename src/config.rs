@@ -8,6 +8,7 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct Data {
+    #[serde(default)]
     pub endpoint: String,
     #[serde(default)]
     pub region: String,
