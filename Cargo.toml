@@ -20,5 +20,5 @@ rusoto_credential = "0.41.0"
 rusoto_s3 = "0.41.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
-slack-hook = "0.7"
+slack-hook = "0.8"
 env_logger = "0.7"
