@@ -37,15 +37,21 @@ fn main() {
     // parse config file
     let file = std::fs::File::open(&config).expect("Unable to open file");
     let yml: config::Config = match serde_yaml::from_reader(file) {
-        Err(err) => {
-            eprintln!("Error parsing configuration file: {}", err);
+        Err(e) => {
+            eprintln!("Error parsing configuration file: {}", e);
             process::exit(1);
         }
         Ok(yml) => yml,
     };
 
     // create an S3 Client
-    let s3 = Arc::new(s3::S3monS3::new(&yml));
+    let s3 = match s3::S3monS3::new(&yml) {
+        Ok(s3) => Arc::new(s3),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
+    };
 
     // store all threads
     let mut children = vec![];

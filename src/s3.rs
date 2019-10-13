@@ -1,6 +1,7 @@
 use crate::auth;
 use crate::config;
 use chrono::prelude::{DateTime, Utc};
+use rusoto_core::region::ParseRegionError;
 use rusoto_core::request::HttpClient;
 use rusoto_core::Region;
 use rusoto_s3::{ListObjectsV2Request, Object, S3Client, S3};
@@ -10,22 +11,30 @@ pub struct S3monS3 {
 }
 
 impl S3monS3 {
-    pub fn new(config: &config::Config) -> Self {
+    pub fn new(config: &config::Config) -> Result<Self, ParseRegionError> {
         let chain = auth::Auth::new(
             config.s3mon.access_key.to_string(),
             config.s3mon.secret_key.to_string(),
         );
 
-        S3monS3 {
+        let region: Region;
+
+        if config.s3mon.endpoint.is_empty() && !config.s3mon.region.is_empty() {
+            region = config.s3mon.region.parse()?;
+        } else {
+            region = Region::Custom {
+                name: config.s3mon.region.to_owned(),
+                endpoint: config.s3mon.endpoint.to_owned(),
+            };
+        }
+
+        Ok(S3monS3 {
             s3: rusoto_s3::S3Client::new_with(
                 HttpClient::new().expect("failed to create request dispatcher"),
                 chain,
-                Region::Custom {
-                    name: config.s3mon.region.to_owned(),
-                    endpoint: config.s3mon.endpoint.to_owned(),
-                },
+                region,
             ),
-        }
+        })
     }
 
     pub fn objects(&self, bucket: String, prefix: String, age: i64) -> Result<Vec<Object>, String> {
