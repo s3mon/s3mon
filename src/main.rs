@@ -144,7 +144,7 @@ s3mon:
       - prefix: bar
       - prefix: baz
         size: 1024
-"#;
+        "#;
         let mut buckets = std::collections::BTreeMap::new();
         buckets.insert(
             "bucket_A".to_string(),
@@ -178,5 +178,48 @@ s3mon:
         let y: config::Config = serde_yaml::from_str(yml)?;
         assert_eq!(cfg, y);
         Ok(())
+    }
+
+    #[test]
+    fn check_object() {
+        use chrono::prelude::{SecondsFormat, Utc};
+        use rusoto_core::Region;
+        use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+        use rusoto_s3::S3Client;
+
+        let last_modified = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+
+        let mock = MockRequestDispatcher::with_status(200).with_body(
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+                  <Name>cubeta</Name>
+                  <Prefix>E</Prefix>
+                  <StartAfter>ExampleGuide.pdf</StartAfter>
+                  <KeyCount>1</KeyCount>
+                  <MaxKeys>3</MaxKeys>
+                  <IsTruncated>false</IsTruncated>
+                  <Contents>
+                    <Key>ExampleObject.txt</Key>
+                    <LastModified>{}</LastModified>
+                    <ETag>"599bab3ed2c697f1d26842727561fd94"</ETag>
+                    <Size>857</Size>
+                    <StorageClass>REDUCED_REDUNDANCY</StorageClass>
+                  </Contents>
+                </ListBucketResult>
+            "#,
+                last_modified
+            )
+            .as_str(),
+        );
+        let client = Arc::new(s3::S3monS3 {
+            s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
+        });
+        let file = config::Object {
+            prefix: "E".to_string(),
+            age: 30,
+            size: 1024,
+        };
+        check(client, "cubeta".to_string(), file);
     }
 }

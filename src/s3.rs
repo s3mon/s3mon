@@ -7,7 +7,7 @@ use rusoto_core::Region;
 use rusoto_s3::{ListObjectsV2Request, Object, S3Client, S3};
 
 pub struct S3monS3 {
-    s3: S3Client,
+    pub s3: S3Client,
 }
 
 impl S3monS3 {
