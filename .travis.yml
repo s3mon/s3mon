@@ -5,7 +5,7 @@ rust:
 
 os:
   - linux
-  - os
+  - osx
 
 script:
   - cargo build --verbose --all
