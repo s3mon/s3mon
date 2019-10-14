@@ -8,5 +8,5 @@ os:
   - osx
 
 script:
-  - cargo build --verbose --all
-  - cargo test --verbose --all
+  - cargo build --all --all-targets
+  - cargo test --all

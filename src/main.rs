@@ -313,4 +313,35 @@ s3mon:
             "cubeta,prefix=E error=false exist=false size_mismatch=false",
         );
     }
+
+    #[test]
+    fn check_object_no_bucket() {
+        use chrono::prelude::{SecondsFormat, Utc};
+        use rusoto_core::Region;
+        use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+        use rusoto_s3::S3Client;
+
+        let mock = MockRequestDispatcher::with_status(404).with_body(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+	    <Error>
+		<Code>NoSuchBucket</Code>
+		<Message>The specified bucket does not exist</Message>
+		<RequestId>4442587FB7D0A2F9</RequestId>
+	    </Error>"#,
+        );
+        let client = Arc::new(s3::S3monS3 {
+            s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
+        });
+        // test finding file & prefix
+        let file = config::Object {
+            prefix: "E".to_string(),
+            age: 30,
+            size: 512,
+        };
+
+        assert_eq!(
+            check(client.clone(), "cubeta".to_string(), file),
+            "cubeta,prefix=E error=true exist=false size_mismatch=false",
+        );
+    }
 }
