@@ -76,7 +76,7 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
     // create InfluxDB line protocol
     // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
     let mut output: Vec<String> = Vec::new();
-    output.push(format!("{},prefix={}", bucket, file.prefix));
+    output.push(format!("s3mon,bucket={},prefix={}", bucket, file.prefix));
 
     let mut exist = false;
     let mut size_mismatch = false;
@@ -105,8 +105,8 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
     }
 
     output.push(format!(
-        "error={} exist={} size_mismatch={}",
-        bucket_error, exist, size_mismatch
+        "error={},exist={},size_mismatch={}",
+        bucket_error, exist, size_mismatch,
     ));
 
     return output.join(" ");
@@ -222,7 +222,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "cubeta,prefix=E error=false exist=true size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=false,exist=true,size_mismatch=false",
         );
     }
 
@@ -269,7 +269,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "cubeta,prefix=E error=false exist=true size_mismatch=true",
+            "s3mon,bucket=cubeta,prefix=E error=false,exist=true,size_mismatch=true",
         );
     }
 
@@ -309,7 +309,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "cubeta,prefix=E error=false exist=false size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=false,exist=false,size_mismatch=false",
         );
     }
 
@@ -339,7 +339,7 @@ s3mon:
 
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "cubeta,prefix=E error=true exist=false size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=true,exist=false,size_mismatch=false",
         );
     }
 }
