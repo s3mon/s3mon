@@ -62,7 +62,7 @@ fn main() {
             let thread_s3 = Arc::clone(&s3);
             let bucket = bucket_name.clone();
             children.push(thread::spawn(|| {
-                check(thread_s3, bucket, file);
+                println!("{}", check(thread_s3, bucket, file));
             }));
         }
     }
@@ -73,7 +73,7 @@ fn main() {
     }
 }
 
-fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
+fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
     // create InfluxDB line protocol
     // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
     let mut output: Vec<String> = Vec::new();
@@ -110,7 +110,7 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) {
         bucket_error, exist, size_mismatch
     ));
 
-    println!("{}", output.join(" "));
+    return output.join(" ");
 }
 
 fn is_file(s: String) -> Result<(), String> {
@@ -215,11 +215,102 @@ s3mon:
         let client = Arc::new(s3::S3monS3 {
             s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
         });
+        // test finding file & prefix
+        let file = config::Object {
+            prefix: "E".to_string(),
+            age: 30,
+            size: 0,
+        };
+        assert_eq!(
+            check(client.clone(), "cubeta".to_string(), file),
+            "cubeta,prefix=E error=false exist=true size_mismatch=false",
+        );
+    }
+
+    #[test]
+    fn check_object_size_mismatch() {
+        use chrono::prelude::{SecondsFormat, Utc};
+        use rusoto_core::Region;
+        use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+        use rusoto_s3::S3Client;
+
+        let last_modified = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+
+        let mock = MockRequestDispatcher::with_status(200).with_body(
+            format!(
+                r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+                  <Name>cubeta</Name>
+                  <Prefix>E</Prefix>
+                  <StartAfter>ExampleGuide.pdf</StartAfter>
+                  <KeyCount>1</KeyCount>
+                  <MaxKeys>3</MaxKeys>
+                  <IsTruncated>false</IsTruncated>
+                  <Contents>
+                    <Key>ExampleObject.txt</Key>
+                    <LastModified>{}</LastModified>
+                    <ETag>"599bab3ed2c697f1d26842727561fd94"</ETag>
+                    <Size>857</Size>
+                    <StorageClass>REDUCED_REDUNDANCY</StorageClass>
+                  </Contents>
+                </ListBucketResult>
+            "#,
+                last_modified
+            )
+            .as_str(),
+        );
+        let client = Arc::new(s3::S3monS3 {
+            s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
+        });
+        // test finding file & prefix
         let file = config::Object {
             prefix: "E".to_string(),
             age: 30,
             size: 1024,
         };
-        check(client, "cubeta".to_string(), file);
+        assert_eq!(
+            check(client.clone(), "cubeta".to_string(), file),
+            "cubeta,prefix=E error=false exist=true size_mismatch=true",
+        );
+    }
+
+    #[test]
+    fn check_object_age_expired() {
+        use rusoto_core::Region;
+        use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
+        use rusoto_s3::S3Client;
+
+        let mock = MockRequestDispatcher::with_status(200).with_body(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+                <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+                  <Name>cubeta</Name>
+                  <Prefix>E</Prefix>
+                  <StartAfter>ExampleGuide.pdf</StartAfter>
+                  <KeyCount>1</KeyCount>
+                  <MaxKeys>3</MaxKeys>
+                  <IsTruncated>false</IsTruncated>
+                  <Contents>
+                    <Key>ExampleObject.txt</Key>
+                    <LastModified>2019-10-14T08:52:23.231Z</LastModified>
+                    <ETag>"599bab3ed2c697f1d26842727561fd94"</ETag>
+                    <Size>857</Size>
+                    <StorageClass>REDUCED_REDUNDANCY</StorageClass>
+                  </Contents>
+                </ListBucketResult>
+            "#,
+        );
+        let client = Arc::new(s3::S3monS3 {
+            s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
+        });
+        // test finding file & prefix
+        let file = config::Object {
+            prefix: "E".to_string(),
+            age: 30,
+            size: 1024,
+        };
+        assert_eq!(
+            check(client.clone(), "cubeta".to_string(), file),
+            "cubeta,prefix=E error=false exist=false size_mismatch=false",
+        );
     }
 }
