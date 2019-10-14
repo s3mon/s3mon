@@ -7,7 +7,6 @@ use std::{process, thread};
 mod auth;
 mod config;
 mod s3;
-mod slack;
 
 fn main() {
     // RUST_LOG=debug
@@ -316,7 +315,6 @@ s3mon:
 
     #[test]
     fn check_object_no_bucket() {
-        use chrono::prelude::{SecondsFormat, Utc};
         use rusoto_core::Region;
         use rusoto_mock::{MockCredentialsProvider, MockRequestDispatcher};
         use rusoto_s3::S3Client;

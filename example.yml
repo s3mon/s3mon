@@ -1,7 +1,7 @@
 ---
 s3mon:
-  endpoint: s3-eu-central-1.provider.tld
-  region: eu-central-1
+  endpoint: s3.provider.tld # if using AWS just define the region
+  region: eu-central-1 # only for AWS, can skip the endpoint
   access_key: ACCESS_KEY_ID
   secret_key: SECRET_ACCESS_KEY
   buckets:
