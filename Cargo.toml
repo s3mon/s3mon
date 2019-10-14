@@ -1,6 +1,6 @@
 [package]
 name = "s3mon"
-version = "0.1.4"
+version = "0.2.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "command line tool for storing streams of data in s3 buckets"
 documentation = "https://s3mon.dev"
