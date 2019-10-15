@@ -105,8 +105,8 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
     }
 
     output.push(format!(
-        "error={},exist={},size_mismatch={}",
-        bucket_error, exist, size_mismatch,
+        "error={}i,exist={}i,size_mismatch={}i",
+        bucket_error as i32, exist as i32, size_mismatch as i32,
     ));
 
     return output.join(" ");
@@ -222,7 +222,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "s3mon,bucket=cubeta,prefix=E error=false,exist=true,size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=0i",
         );
     }
 
@@ -269,7 +269,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "s3mon,bucket=cubeta,prefix=E error=false,exist=true,size_mismatch=true",
+            "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=1i",
         );
     }
 
@@ -309,7 +309,7 @@ s3mon:
         };
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "s3mon,bucket=cubeta,prefix=E error=false,exist=false,size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=0i,exist=0i,size_mismatch=0i",
         );
     }
 
@@ -339,7 +339,7 @@ s3mon:
 
         assert_eq!(
             check(client.clone(), "cubeta".to_string(), file),
-            "s3mon,bucket=cubeta,prefix=E error=true,exist=false,size_mismatch=false",
+            "s3mon,bucket=cubeta,prefix=E error=1i,exist=0i,size_mismatch=0i",
         );
     }
 }
