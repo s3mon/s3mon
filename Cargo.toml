@@ -1,6 +1,6 @@
 [package]
 name = "s3mon"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "command line tool for storing streams of data in s3 buckets"
 documentation = "https://s3mon.dev"
@@ -10,6 +10,9 @@ keywords = ["s3", "files", "backup", "monitor", "bucket"]
 categories = ["command-line-utilities", "command-line-interface"]
 license-file = "LICENSE"
 edition = "2018"
+
+[badges]
+travis-ci = { repository = "s3mon/s3mon", branch = "master" }
 
 [dependencies]
 chrono = "0.4"
