@@ -10,10 +10,10 @@ pub struct Auth {
 
 impl Auth {
     pub fn new(access_key: String, secret_key: String) -> Auth {
-        return Auth {
-            access_key: access_key,
-            secret_key: secret_key,
-        };
+        Auth {
+            access_key,
+            secret_key,
+        }
     }
 }
 

@@ -7,6 +7,10 @@ os:
   - linux
   - osx
 
+before_script:
+  - rustup component add clippy
 script:
+  - cargo clippy
+  - cargo clippy -- -D warnings
   - cargo build --all --all-targets
   - cargo test --all

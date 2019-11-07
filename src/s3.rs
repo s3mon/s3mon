@@ -17,16 +17,14 @@ impl S3monS3 {
             config.s3mon.secret_key.to_string(),
         );
 
-        let region: Region;
-
-        if config.s3mon.endpoint.is_empty() && !config.s3mon.region.is_empty() {
-            region = config.s3mon.region.parse()?;
+        let region = if config.s3mon.endpoint.is_empty() && !config.s3mon.region.is_empty() {
+            config.s3mon.region.parse()?
         } else {
-            region = Region::Custom {
+            Region::Custom {
                 name: config.s3mon.region.to_owned(),
                 endpoint: config.s3mon.endpoint.to_owned(),
-            };
-        }
+            }
+        };
 
         Ok(S3monS3 {
             s3: rusoto_s3::S3Client::new_with(

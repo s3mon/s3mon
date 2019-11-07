@@ -85,7 +85,7 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
     // query the bucket
     match s3.objects(bucket, file.prefix, file.age) {
         Ok(objects) => {
-            if objects.len() > 0 {
+            if !objects.is_empty() {
                 exist = true;
             }
             for o in objects {
@@ -109,7 +109,7 @@ fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
         bucket_error as i32, exist as i32, size_mismatch as i32,
     ));
 
-    return output.join(" ");
+    output.join(" ")
 }
 
 fn is_file(s: String) -> Result<(), String> {
@@ -118,7 +118,7 @@ fn is_file(s: String) -> Result<(), String> {
         Ok(metadata) => metadata,
     };
     if !metadata.is_file() {
-        return Err(String::from(format!("cannot read file: {}", s)));
+        return Err(format!("cannot read file: {}", s));
     }
     Ok(())
 }
@@ -171,7 +171,7 @@ s3mon:
                 region: "region".to_string(),
                 access_key: "ACCESS_KEY_ID".to_string(),
                 secret_key: "SECRET_ACCESS_KEY".to_string(),
-                buckets: buckets,
+                buckets,
             },
         };
         let y: config::Config = serde_yaml::from_str(yml)?;
