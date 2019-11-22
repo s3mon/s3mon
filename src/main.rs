@@ -44,7 +44,7 @@ fn main() {
     };
 
     // create an S3 Client
-    let s3 = match s3::S3monS3::new(&yml) {
+    let s3 = match s3::Monitor::new(&yml) {
         Ok(s3) => Arc::new(s3),
         Err(e) => {
             eprintln!("Error: {}", e);
@@ -72,7 +72,7 @@ fn main() {
     }
 }
 
-fn check(s3: Arc<s3::S3monS3>, bucket: String, file: config::Object) -> String {
+fn check(s3: Arc<s3::Monitor>, bucket: String, file: config::Object) -> String {
     // create InfluxDB line protocol
     // https://docs.influxdata.com/influxdb/v1.7/write_protocols/line_protocol_tutorial/
     let mut output: Vec<String> = Vec::new();
@@ -211,7 +211,7 @@ s3mon:
             )
             .as_str(),
         );
-        let client = Arc::new(s3::S3monS3 {
+        let client = Arc::new(s3::Monitor {
             s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
         });
         // test finding file & prefix
@@ -258,7 +258,7 @@ s3mon:
             )
             .as_str(),
         );
-        let client = Arc::new(s3::S3monS3 {
+        let client = Arc::new(s3::Monitor {
             s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
         });
         // test finding file & prefix
@@ -298,7 +298,7 @@ s3mon:
                 </ListBucketResult>
             "#,
         );
-        let client = Arc::new(s3::S3monS3 {
+        let client = Arc::new(s3::Monitor {
             s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
         });
         // test finding file & prefix
@@ -327,7 +327,7 @@ s3mon:
 		<RequestId>4442587FB7D0A2F9</RequestId>
 	    </Error>"#,
         );
-        let client = Arc::new(s3::S3monS3 {
+        let client = Arc::new(s3::Monitor {
             s3: S3Client::new_with(mock, MockCredentialsProvider, Region::UsEast1),
         });
         // test finding file & prefix

@@ -6,11 +6,11 @@ use rusoto_core::request::HttpClient;
 use rusoto_core::Region;
 use rusoto_s3::{ListObjectsV2Request, Object, S3Client, S3};
 
-pub struct S3monS3 {
+pub struct Monitor {
     pub s3: S3Client,
 }
 
-impl S3monS3 {
+impl Monitor {
     pub fn new(config: &config::Config) -> Result<Self, ParseRegionError> {
         let chain = auth::Auth::new(
             config.s3mon.access_key.to_string(),
@@ -26,7 +26,7 @@ impl S3monS3 {
             }
         };
 
-        Ok(S3monS3 {
+        Ok(Self {
             s3: rusoto_s3::S3Client::new_with(
                 HttpClient::new().expect("failed to create request dispatcher"),
                 chain,
