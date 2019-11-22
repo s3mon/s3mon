@@ -221,7 +221,7 @@ s3mon:
             size: 0,
         };
         assert_eq!(
-            check(client.clone(), "cubeta".to_string(), file),
+            check(client, "cubeta".to_string(), file),
             "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=0i",
         );
     }
@@ -268,7 +268,7 @@ s3mon:
             size: 1024,
         };
         assert_eq!(
-            check(client.clone(), "cubeta".to_string(), file),
+            check(client, "cubeta".to_string(), file),
             "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=1i",
         );
     }
@@ -308,7 +308,7 @@ s3mon:
             size: 1024,
         };
         assert_eq!(
-            check(client.clone(), "cubeta".to_string(), file),
+            check(client, "cubeta".to_string(), file),
             "s3mon,bucket=cubeta,prefix=E error=0i,exist=0i,size_mismatch=0i",
         );
     }
@@ -338,7 +338,7 @@ s3mon:
         };
 
         assert_eq!(
-            check(client.clone(), "cubeta".to_string(), file),
+            check(client, "cubeta".to_string(), file),
             "s3mon,bucket=cubeta,prefix=E error=1i,exist=0i,size_mismatch=0i",
         );
     }

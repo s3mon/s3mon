@@ -28,6 +28,6 @@ pub struct Object {
     pub size: i64,
 }
 
-fn default_age() -> i64 {
+const fn default_age() -> i64 {
     86400
 }

@@ -9,7 +9,7 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(access_key: String, secret_key: String) -> Auth {
+    pub const fn new(access_key: String, secret_key: String) -> Auth {
         Auth {
             access_key,
             secret_key,

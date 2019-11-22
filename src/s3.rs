@@ -40,7 +40,7 @@ impl S3monS3 {
         let age = now - chrono::Duration::seconds(age);
 
         let list_objects_req = ListObjectsV2Request {
-            bucket: bucket.to_owned(),
+            bucket,
             prefix: Some(prefix),
             ..Default::default()
         };

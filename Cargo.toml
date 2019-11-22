@@ -1,14 +1,14 @@
 [package]
 name = "s3mon"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
-description = "command line tool for storing streams of data in s3 buckets"
+description = "monitor s3 buckets for missing files"
 documentation = "https://s3mon.dev"
 homepage = "https://s3mon.dev"
 readme = "README.md"
 keywords = ["s3", "files", "backup", "monitor", "bucket"]
 categories = ["command-line-utilities", "command-line-interface"]
-license-file = "LICENSE"
+license = "BSD-3-Clause"
 edition = "2018"
 
 [badges]
@@ -16,12 +16,12 @@ travis-ci = { repository = "s3mon/s3mon", branch = "master" }
 
 [dependencies]
 chrono = "0.4"
-clap = "2"
+clap = "2.33"
 env_logger = "0.7"
 futures = "0.1.29"
-rusoto_core = "0.41.0"
-rusoto_credential = "0.41.0"
-rusoto_mock = "0.41.0"
-rusoto_s3 = "0.41.0"
+rusoto_core = "0.42.0"
+rusoto_credential = "0.42.0"
+rusoto_mock = "0.42.0"
+rusoto_s3 = "0.42.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
