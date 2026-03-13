@@ -4,7 +4,6 @@ mod helpers;
 
 /// A freshly uploaded object is visible and not age-expired.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn object_exists_and_fresh() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-fresh").await?;
@@ -19,7 +18,6 @@ async fn object_exists_and_fresh() -> anyhow::Result<()> {
 
 /// With age=0 the cutoff equals now, so any object already stored is considered expired.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn object_exists_age_expired() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-expired").await?;
@@ -34,7 +32,6 @@ async fn object_exists_age_expired() -> anyhow::Result<()> {
 
 /// An object whose size is below the configured minimum triggers a size mismatch.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn object_size_below_threshold() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-size").await?;
@@ -62,7 +59,6 @@ async fn object_size_below_threshold() -> anyhow::Result<()> {
 
 /// A bucket that exists but contains no matching keys reports zero objects.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn prefix_not_found() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-empty").await?;
@@ -78,7 +74,6 @@ async fn prefix_not_found() -> anyhow::Result<()> {
 
 /// Two prefixes in the same bucket: one populated, one empty.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-multi-prefix").await?;
@@ -102,7 +97,6 @@ async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
 
 /// Two independent buckets are monitored separately.
 #[tokio::test]
-#[ignore = "requires Docker or Podman (run with --include-ignored)"]
 async fn multiple_buckets_independent() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("bucket-alpha").await?;
