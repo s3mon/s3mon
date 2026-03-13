@@ -5,9 +5,13 @@
 [![Crates.io](https://img.shields.io/crates/v/s3mon.svg)](https://crates.io/crates/s3mon)
 [![License](https://img.shields.io/crates/l/s3mon.svg)](https://github.com/s3mon/s3mon/blob/master/LICENSE)
 
-`s3mon` checks that expected objects exist in S3 (or any S3-compatible storage)
-and outputs results in **InfluxDB line protocol**, making it easy to feed into
-monitoring pipelines (Telegraf, InfluxDB, Grafana, etc.).
+`s3mon` checks that expected objects exist in S3 (or any S3-compatible storage) and
+prints the results as metrics to **stdout**.
+
+It is designed to be **run on demand** — typically from a cron job — and exits
+immediately after checking all configured bucket/prefix pairs.  There is no
+long-running process, no open port, and no persistent state: every invocation is
+self-contained.
 
 ## How it works
 
@@ -16,21 +20,45 @@ For each configured bucket/prefix pair, `s3mon`:
 1. Lists all objects under that prefix using `ListObjectsV2`
 2. Filters out objects older than the configured `age` (seconds)
 3. Optionally checks that at least one object meets a minimum `size` (bytes)
-4. Prints one line of InfluxDB line protocol per prefix to stdout
-
-Each output line looks like:
-
-```
-s3mon,bucket=<bucket>,prefix=<prefix> error=0i,exist=1i,size_mismatch=0i
-```
-
-| Field          | Value | Meaning                                              |
-|----------------|-------|------------------------------------------------------|
-| `error`        | `1`   | S3 API call failed (bucket missing, auth error, etc) |
-| `exist`        | `1`   | At least one object newer than `age` was found       |
-| `size_mismatch`| `1`   | Found object(s) but all are smaller than `size`      |
+4. Collects the result for every pair, then prints them all at once
 
 All checks run concurrently — one async task per bucket/prefix pair.
+
+## Output formats
+
+`s3mon` supports two output formats selected with the `-f` / `--format` flag.
+
+### Prometheus (default)
+
+```
+# HELP s3mon_object_exists Object exists within the configured age window
+# TYPE s3mon_object_exists gauge
+s3mon_object_exists{bucket="bucket_A",prefix="daily/"} 1
+s3mon_object_exists{bucket="bucket_B",prefix="logs/"}  0
+# HELP s3mon_check_error S3 API call failed
+# TYPE s3mon_check_error gauge
+s3mon_check_error{bucket="bucket_A",prefix="daily/"} 0
+s3mon_check_error{bucket="bucket_B",prefix="logs/"}  1
+# HELP s3mon_size_mismatch Object size is below the configured minimum
+# TYPE s3mon_size_mismatch gauge
+s3mon_size_mismatch{bucket="bucket_A",prefix="daily/"} 0
+s3mon_size_mismatch{bucket="bucket_B",prefix="logs/"}  0
+```
+
+### InfluxDB line protocol (`--format influxdb`)
+
+```
+s3mon,bucket=bucket_A,prefix=daily/ error=0i,exist=1i,size_mismatch=0i
+s3mon,bucket=bucket_B,prefix=logs/  error=1i,exist=0i,size_mismatch=0i
+```
+
+### Metric fields
+
+| Metric / Field  | Value `1` means …                                         |
+|-----------------|-----------------------------------------------------------|
+| `object_exists` | At least one object newer than `age` was found            |
+| `check_error`   | S3 API call failed (missing bucket, auth error, etc.)     |
+| `size_mismatch` | Found object(s) but all are smaller than `size`           |
 
 ## Installation
 
@@ -50,32 +78,32 @@ cargo build --release
 ## Usage
 
 ```
-s3mon -c config.yml
+s3mon -c config.yml [--format prometheus|influxdb]
 ```
 
 ```
 Options:
-  -c, --config <FILE>   Path to configuration YAML file [required]
-  -v, --verbose         Increase log verbosity (-v INFO, -vv DEBUG, -vvv TRACE)
-  -h, --help            Print help
-  -V, --version         Print version
+  -c, --config <FILE>         Path to configuration YAML file [required]
+  -f, --format <FORMAT>       Output format: prometheus (default) or influxdb
+  -v, --verbose               Increase log verbosity (-v INFO, -vv DEBUG, -vvv TRACE)
+  -h, --help                  Print help
+  -V, --version               Print version
 ```
 
 Log output goes to **stderr**; metric output goes to **stdout**, so they can be
 redirected independently:
 
 ```sh
-s3mon -c config.yml > metrics.txt
-s3mon -c config.yml 2>s3mon.log
+s3mon -c config.yml 2>/var/log/s3mon.log
 ```
 
 ## Configuration
 
 ```yaml
-# config.yml
+# /etc/s3mon.yml
 s3mon:
   endpoint: s3.provider.tld   # omit when using AWS (set region instead)
-  region: eu-central-1        # AWS region, or an arbitrary name for custom endpoints
+  region: eu-central-1        # AWS region, or any label for custom endpoints
   access_key: ACCESS_KEY_ID   # leave empty to use the AWS default credential chain
   secret_key: SECRET_ACCESS_KEY
   buckets:
@@ -105,9 +133,8 @@ s3mon:
 
 ### Credential resolution
 
-If `access_key` and `secret_key` are both set in the config file, those static
-credentials are used. Otherwise `s3mon` falls back to the standard AWS
-credential chain:
+If `access_key` and `secret_key` are both set, those static credentials are used.
+Otherwise `s3mon` falls back to the standard AWS credential chain:
 
 1. `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` environment variables
 2. `~/.aws/credentials` file
@@ -139,17 +166,184 @@ s3mon:
         age: 3600
 ```
 
-## Integrating with Telegraf
+---
 
-Use the [`exec` input plugin](https://github.com/influxdata/telegraf/tree/master/plugins/inputs/exec)
-to collect metrics:
+## Integrating with monitoring systems
+
+`s3mon` is deliberately a run-and-exit tool.  Wire it into whatever collection
+pipeline you already have — no extra processes or ports required.
+
+Two main integration patterns exist.  Choose based on what you already run:
+
+| You have | Best path | Format |
+|---|---|---|
+| node_exporter on the host | textfile collector | `prometheus` (default) |
+| vmagent on the host, no node_exporter | direct push to vmagent | `influxdb` |
+| vmagent + node_exporter | either works; textfile is simpler | `prometheus` |
+
+---
+
+### Path A — node_exporter textfile collector
+
+**How it works:**
+
+```
+cron
+ └─ s3mon --format prometheus → s3mon.prom (file on disk)
+                                      ↓
+                          node_exporter textfile collector
+                                      ↓  (HTTP scrape)
+                                  vmagent
+                                      ↓  (remote_write)
+                              Cortex / VictoriaMetrics
+```
+
+node_exporter's textfile collector watches a directory for `*.prom` files and
+merges them into its own `/metrics` endpoint on the next scrape.  vmagent
+(which you already have scraping node_exporter) picks them up automatically —
+**no extra vmagent config required**.
+
+**1. Enable the textfile collector** by pointing node_exporter at a directory:
+
+```sh
+node_exporter --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+```
+
+Or in a systemd unit drop-in (`/etc/systemd/system/node_exporter.service.d/textfile.conf`):
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/local/bin/node_exporter \
+  --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+```
+
+**2. Write the cron job** (`/etc/cron.d/s3mon`):
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml \
+  > /var/lib/node_exporter/textfile_collector/s3mon.prom.tmp \
+  && mv /var/lib/node_exporter/textfile_collector/s3mon.prom.tmp \
+        /var/lib/node_exporter/textfile_collector/s3mon.prom
+```
+
+The write-to-tmp-then-`mv` pattern is intentional: `rename(2)` is atomic on
+POSIX filesystems, so node_exporter never reads a partially-written file.
+The `&&` means if `s3mon` fails the old `.prom` is preserved intact.
+
+**3. Verify** — after the first cron run, check node_exporter exposes the metrics:
+
+```sh
+curl -s http://localhost:9100/metrics | grep s3mon
+```
+
+---
+
+### Path B — push directly to vmagent
+
+**How it works:**
+
+```
+cron
+ └─ s3mon --format influxdb | curl → vmagent :8429/influx/write
+                                            ↓  (remote_write)
+                                    Cortex / VictoriaMetrics
+```
+
+No node_exporter required.  vmagent accepts InfluxDB line protocol on its
+ingestion endpoint and forwards to your configured `remoteWrite` target.
+vmagent also buffers writes to disk if the backend is temporarily unavailable.
+
+**Cron job** (`/etc/cron.d/s3mon`):
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml --format influxdb \
+  | curl -sf --max-time 10 \
+         -X POST http://localhost:8429/influx/write \
+         --data-binary @-
+```
+
+`--max-time 10` prevents curl from hanging indefinitely if vmagent is
+unreachable.  `-sf` makes curl silent and treats HTTP errors as failures
+(so cron can log them).
+
+**Verify** — check vmagent received the data:
+
+```sh
+# vmagent self-metrics: look for ingested lines
+curl -s http://localhost:8429/metrics | grep influx
+
+# or query directly from VictoriaMetrics / Cortex
+curl -s 'http://victoriametrics:8428/api/v1/query?query=s3mon_object_exists'
+```
+
+**Adding a label to identify the host** (useful when pushing from multiple machines):
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml --format influxdb \
+  | curl -sf --max-time 10 \
+         -X POST "http://localhost:8429/influx/write?extra_label=host=$(hostname -s)" \
+         --data-binary @-
+```
+
+vmagent's `extra_label` query parameter injects an additional label on every
+series it receives — the equivalent of node_exporter's automatic `instance`
+label.
+
+---
+
+### Path C — push to VictoriaMetrics single-node (no vmagent)
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml --format influxdb \
+  | curl -sf --max-time 10 \
+         -X POST http://victoriametrics:8428/influx/write \
+         --data-binary @-
+```
+
+---
+
+### Other integrations
+
+**InfluxDB:**
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml --format influxdb \
+  | curl -sf --max-time 10 \
+         -X POST "http://influxdb:8086/write?db=monitoring" \
+         --data-binary @-
+```
+
+**Telegraf exec input:**
 
 ```toml
 [[inputs.exec]]
-  commands = ["/usr/local/bin/s3mon -c /etc/s3mon/config.yml"]
+  commands = ["/usr/local/bin/s3mon -c /etc/s3mon/config.yml --format influxdb"]
   timeout = "30s"
   data_format = "influx"
 ```
+
+---
+
+## Grafana dashboard
+
+An example dashboard is provided at
+[`contrib/grafana/s3mon-dashboard.json`](contrib/grafana/s3mon-dashboard.json).
+
+Import it via **Dashboards → Import → Upload JSON file** in Grafana.  The
+dashboard works with any Prometheus-compatible datasource (Prometheus,
+VictoriaMetrics, Thanos, Cortex, Mimir).
+
+It includes:
+
+- **Summary row** — stat panels for total existing objects, missing objects,
+  API errors, and size mismatches
+- **Status table** — colour-coded per-bucket / per-prefix status at a glance
+- **Trends row** — time-series graphs for `object_exists`, `check_error`, and
+  `size_mismatch` over the selected time window
+- **Variables** — filter by datasource, scrape job, and bucket
+
+---
 
 ## Docker
 

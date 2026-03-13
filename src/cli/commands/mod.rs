@@ -37,6 +37,15 @@ pub fn new() -> Command {
                 .required(true),
         )
         .arg(
+            Arg::new("format")
+                .short('f')
+                .long("format")
+                .value_name("FORMAT")
+                .help("Output format: prometheus (default) or influxdb")
+                .default_value("prometheus")
+                .value_parser(["prometheus", "influxdb"]),
+        )
+        .arg(
             Arg::new("verbose")
                 .short('v')
                 .long("verbose")
@@ -76,5 +85,23 @@ mod tests {
         let long_version = cmd.get_long_version().unwrap_or("").to_string();
         assert!(long_version.contains(env!("CARGO_PKG_VERSION")));
         assert!(long_version.contains(" - "));
+    }
+
+    #[test]
+    fn test_format_default_is_prometheus() {
+        let matches = new().get_matches_from(vec!["s3mon", "-c", "example.yml"]);
+        assert_eq!(
+            matches.get_one::<String>("format").map(String::as_str),
+            Some("prometheus")
+        );
+    }
+
+    #[test]
+    fn test_format_influxdb_flag() {
+        let matches = new().get_matches_from(vec!["s3mon", "-c", "example.yml", "-f", "influxdb"]);
+        assert_eq!(
+            matches.get_one::<String>("format").map(String::as_str),
+            Some("influxdb")
+        );
     }
 }

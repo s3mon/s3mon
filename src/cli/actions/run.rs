@@ -1,5 +1,6 @@
 use crate::cli::actions::Action;
 use crate::config;
+use crate::output::{CheckResult, OutputFormat, format_influxdb, format_prometheus};
 use crate::s3;
 use anyhow::Result;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use std::sync::Arc;
 /// S3 client cannot be initialised.
 pub async fn execute(action: &Action) -> Result<()> {
     match action {
-        Action::Monitor { config } => {
+        Action::Monitor { config, format } => {
             let file = std::fs::File::open(config)
                 .map_err(|e| anyhow::anyhow!("cannot open config '{}': {e}", config.display()))?;
 
@@ -27,28 +28,30 @@ pub async fn execute(action: &Action) -> Result<()> {
                 for file in files {
                     let m = Arc::clone(&monitor);
                     let bucket = bucket_name.clone();
-                    tasks.push(tokio::spawn(async move {
-                        println!("{}", check(&m, bucket, file).await);
-                    }));
+                    tasks.push(tokio::spawn(async move { check(&m, bucket, file).await }));
                 }
             }
 
+            let mut results: Vec<CheckResult> = vec![];
             for task in tasks {
-                task.await.map_err(|e| anyhow::anyhow!("task error: {e}"))?;
+                results.push(task.await.map_err(|e| anyhow::anyhow!("task error: {e}"))?);
             }
 
+            let output = match format {
+                OutputFormat::Prometheus => format_prometheus(&results),
+                OutputFormat::Influxdb => format_influxdb(&results),
+            };
+
+            print!("{output}");
             Ok(())
         }
     }
 }
 
-async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> String {
-    let mut output: Vec<String> = Vec::new();
-    output.push(format!("s3mon,bucket={},prefix={}", bucket, file.prefix));
-
+async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> CheckResult {
     let mut exist = false;
     let mut size_mismatch = false;
-    let mut bucket_error = false;
+    let mut error = false;
 
     match monitor.objects(&bucket, &file.prefix, file.age).await {
         Ok(objects) => {
@@ -66,18 +69,17 @@ async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> S
         }
         Err(e) => {
             eprintln!("Error: {e}");
-            bucket_error = true;
+            error = true;
         }
     }
 
-    output.push(format!(
-        "error={}i,exist={}i,size_mismatch={}i",
-        i32::from(bucket_error),
-        i32::from(exist),
-        i32::from(size_mismatch),
-    ));
-
-    output.join(" ")
+    CheckResult {
+        bucket,
+        prefix: file.prefix,
+        exist,
+        error,
+        size_mismatch,
+    }
 }
 
 #[cfg(test)]
@@ -140,10 +142,10 @@ mod tests {
             age: 30,
             size: 0,
         };
-        assert_eq!(
-            check(&monitor, "cubeta".to_string(), file).await,
-            "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=0i",
-        );
+        let result = check(&monitor, "cubeta".to_string(), file).await;
+        assert!(result.exist);
+        assert!(!result.error);
+        assert!(!result.size_mismatch);
     }
 
     #[tokio::test]
@@ -173,10 +175,10 @@ mod tests {
             age: 30,
             size: 1024,
         };
-        assert_eq!(
-            check(&monitor, "cubeta".to_string(), file).await,
-            "s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=1i",
-        );
+        let result = check(&monitor, "cubeta".to_string(), file).await;
+        assert!(result.exist);
+        assert!(!result.error);
+        assert!(result.size_mismatch);
     }
 
     #[tokio::test]
@@ -203,10 +205,10 @@ mod tests {
             age: 30,
             size: 1024,
         };
-        assert_eq!(
-            check(&monitor, "cubeta".to_string(), file).await,
-            "s3mon,bucket=cubeta,prefix=E error=0i,exist=0i,size_mismatch=0i",
-        );
+        let result = check(&monitor, "cubeta".to_string(), file).await;
+        assert!(!result.exist);
+        assert!(!result.error);
+        assert!(!result.size_mismatch);
     }
 
     #[tokio::test]
@@ -224,9 +226,37 @@ mod tests {
             age: 30,
             size: 512,
         };
-        assert_eq!(
-            check(&monitor, "cubeta".to_string(), file).await,
-            "s3mon,bucket=cubeta,prefix=E error=1i,exist=0i,size_mismatch=0i",
-        );
+        let result = check(&monitor, "cubeta".to_string(), file).await;
+        assert!(!result.exist);
+        assert!(result.error);
+        assert!(!result.size_mismatch);
+    }
+
+    #[test]
+    fn prometheus_output_fresh_object() {
+        let results = vec![CheckResult {
+            bucket: "cubeta".to_string(),
+            prefix: "E".to_string(),
+            exist: true,
+            error: false,
+            size_mismatch: false,
+        }];
+        let out = format_prometheus(&results);
+        assert!(out.contains(r#"s3mon_object_exists{bucket="cubeta",prefix="E"} 1"#));
+        assert!(out.contains(r#"s3mon_check_error{bucket="cubeta",prefix="E"} 0"#));
+        assert!(out.contains(r#"s3mon_size_mismatch{bucket="cubeta",prefix="E"} 0"#));
+    }
+
+    #[test]
+    fn influxdb_output_fresh_object() {
+        let results = vec![CheckResult {
+            bucket: "cubeta".to_string(),
+            prefix: "E".to_string(),
+            exist: true,
+            error: false,
+            size_mismatch: false,
+        }];
+        let out = format_influxdb(&results);
+        assert!(out.contains("s3mon,bucket=cubeta,prefix=E error=0i,exist=1i,size_mismatch=0i"));
     }
 }

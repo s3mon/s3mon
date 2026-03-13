@@ -1,4 +1,5 @@
 use crate::cli::actions::Action;
+use crate::output::OutputFormat;
 use anyhow::Result;
 use clap::ArgMatches;
 use std::path::PathBuf;
@@ -22,7 +23,15 @@ pub fn handler(matches: &ArgMatches) -> Result<Action> {
         anyhow::bail!("'{}' is not a regular file", path.display());
     }
 
-    Ok(Action::Monitor { config: path })
+    let format = match matches.get_one::<String>("format").map(String::as_str) {
+        Some("influxdb") => OutputFormat::Influxdb,
+        _ => OutputFormat::Prometheus,
+    };
+
+    Ok(Action::Monitor {
+        config: path,
+        format,
+    })
 }
 
 #[cfg(test)]
@@ -35,8 +44,25 @@ mod tests {
         let matches = commands::new().get_matches_from(vec!["s3mon", "-c", "example.yml"]);
         let action = handler(&matches);
         assert!(action.is_ok());
-        if let Ok(Action::Monitor { config }) = action {
+        if let Ok(Action::Monitor { config, format }) = action {
             assert_eq!(config, PathBuf::from("example.yml"));
+            assert_eq!(format, OutputFormat::Prometheus);
+        }
+    }
+
+    #[test]
+    fn test_handler_monitor_influxdb_format() {
+        let matches = commands::new().get_matches_from(vec![
+            "s3mon",
+            "-c",
+            "example.yml",
+            "--format",
+            "influxdb",
+        ]);
+        let action = handler(&matches);
+        assert!(action.is_ok());
+        if let Ok(Action::Monitor { format, .. }) = action {
+            assert_eq!(format, OutputFormat::Influxdb);
         }
     }
 

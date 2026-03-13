@@ -1,8 +1,5 @@
-test: build-bin clippy fmt
+test: clippy fmt
   cargo test
-
-build-bin:
-  cargo build --bins
 
 clippy:
   cargo clippy --all-targets --all-features
