@@ -3,6 +3,8 @@ use anyhow::Result;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
 use aws_sdk_s3::types::Object;
+use aws_smithy_http_client::Builder as HttpClientBuilder;
+use aws_smithy_http_client::tls;
 use chrono::prelude::Utc;
 
 pub struct Monitor {
@@ -22,7 +24,14 @@ impl Monitor {
     ///
     /// Returns an error if the AWS configuration cannot be loaded.
     pub async fn new(config: &config::Config) -> Result<Self> {
-        let mut cfg_builder = aws_config::defaults(aws_config::BehaviorVersion::latest());
+        let http_client = HttpClientBuilder::new()
+            .tls_provider(tls::Provider::Rustls(
+                tls::rustls_provider::CryptoMode::Ring,
+            ))
+            .build_https();
+
+        let mut cfg_builder =
+            aws_config::defaults(aws_config::BehaviorVersion::latest()).http_client(http_client);
 
         if !config.s3mon.access_key.is_empty() && !config.s3mon.secret_key.is_empty() {
             let creds = Credentials::new(
