@@ -70,6 +70,26 @@ fn configure_container_runtime() {
     });
 }
 
+/// Returns true if a Docker/Podman runtime appears to be available.
+pub fn has_container_runtime() -> bool {
+    if std::env::var("DOCKER_HOST").is_ok() {
+        return true;
+    }
+    if std::path::Path::new("/var/run/docker.sock").exists() {
+        return true;
+    }
+    if let Ok(xdg) = std::env::var("XDG_RUNTIME_DIR") {
+        if std::path::Path::new(&format!("{xdg}/podman/podman.sock")).exists() {
+            return true;
+        }
+    }
+    if std::path::Path::new("/var/run/podman/podman.sock").exists() {
+        return true;
+    }
+    false
+}
+
+
 /// Start a fresh MinIO container and return a [`MinioEnv`] ready for use.
 pub async fn start_minio() -> anyhow::Result<MinioEnv> {
     configure_container_runtime();

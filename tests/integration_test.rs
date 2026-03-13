@@ -5,6 +5,9 @@ mod helpers;
 /// A freshly uploaded object is visible and not age-expired.
 #[tokio::test]
 async fn object_exists_and_fresh() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("test-fresh").await?;
     env.put_object("test-fresh", "data/file.txt", b"hello world")
@@ -22,6 +25,9 @@ async fn object_exists_and_fresh() -> anyhow::Result<()> {
 /// With age=0 the cutoff equals now, so any object already stored is considered expired.
 #[tokio::test]
 async fn object_exists_age_expired() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("test-expired").await?;
     env.put_object("test-expired", "data/file.txt", b"hello world")
@@ -39,6 +45,9 @@ async fn object_exists_age_expired() -> anyhow::Result<()> {
 /// An object whose size is below the configured minimum triggers a size mismatch.
 #[tokio::test]
 async fn object_size_below_threshold() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("test-size").await?;
     // 11 bytes – intentionally smaller than the 1 024-byte threshold
@@ -58,6 +67,9 @@ async fn object_size_below_threshold() -> anyhow::Result<()> {
 /// A bucket that exists but contains no matching keys reports zero objects.
 #[tokio::test]
 async fn prefix_not_found() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("test-empty").await?;
 
@@ -73,6 +85,9 @@ async fn prefix_not_found() -> anyhow::Result<()> {
 /// Two prefixes in the same bucket: one populated, one empty.
 #[tokio::test]
 async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("test-multi-prefix").await?;
     env.put_object("test-multi-prefix", "present/data.bin", b"payload")
@@ -96,6 +111,9 @@ async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
 /// Two independent buckets are monitored separately.
 #[tokio::test]
 async fn multiple_buckets_independent() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
     let env = helpers::start_minio().await?;
     env.create_bucket("bucket-alpha").await?;
     env.create_bucket("bucket-beta").await?;
