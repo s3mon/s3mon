@@ -3,8 +3,6 @@
 [![Test & Build](https://github.com/s3mon/s3mon/actions/workflows/build.yml/badge.svg)](https://github.com/s3mon/s3mon/actions/workflows/build.yml)
 [![codecov](https://codecov.io/gh/s3mon/s3mon/branch/main/graph/badge.svg)](https://codecov.io/gh/s3mon/s3mon)
 [![Crates.io](https://img.shields.io/crates/v/s3mon.svg)](https://crates.io/crates/s3mon)
-[![Downloads](https://img.shields.io/crates/d/s3mon.svg)](https://crates.io/crates/s3mon)
-[![Documentation](https://docs.rs/s3mon/badge.svg)](https://docs.rs/s3mon)
 [![License](https://img.shields.io/crates/l/s3mon.svg)](https://github.com/s3mon/s3mon/blob/master/LICENSE)
 
 `s3mon` checks that expected objects exist in S3 (or any S3-compatible storage)
