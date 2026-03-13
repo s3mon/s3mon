@@ -10,8 +10,11 @@ async fn object_exists_and_fresh() -> anyhow::Result<()> {
     env.put_object("test-fresh", "data/file.txt", b"hello world")
         .await?;
 
-    let objects = env.monitor.objects("test-fresh", "data/", 86400).await?;
-    assert_eq!(objects.len(), 1, "expected exactly 1 fresh object");
+    let stats = env
+        .monitor
+        .check_storage("test-fresh", "data/", 86400, 0)
+        .await?;
+    assert!(stats.exists, "expected exactly 1 fresh object");
 
     Ok(())
 }
@@ -24,8 +27,11 @@ async fn object_exists_age_expired() -> anyhow::Result<()> {
     env.put_object("test-expired", "data/file.txt", b"hello world")
         .await?;
 
-    let objects = env.monitor.objects("test-expired", "data/", 0).await?;
-    assert!(objects.is_empty(), "expected no objects with age=0");
+    let stats = env
+        .monitor
+        .check_storage("test-expired", "data/", 0, 0)
+        .await?;
+    assert!(!stats.exists, "expected no objects with age=0");
 
     Ok(())
 }
@@ -39,20 +45,12 @@ async fn object_size_below_threshold() -> anyhow::Result<()> {
     env.put_object("test-size", "data/file.txt", b"hello world")
         .await?;
 
-    let objects = env.monitor.objects("test-size", "data/", 86400).await?;
-    assert_eq!(objects.len(), 1, "expected 1 object");
-
-    let first = objects
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("no objects returned"))?;
-    let actual_size = first
-        .size()
-        .ok_or_else(|| anyhow::anyhow!("object has no size metadata"))?;
-
-    assert!(
-        actual_size < 1024,
-        "size should be below threshold (got {actual_size})"
-    );
+    let stats = env
+        .monitor
+        .check_storage("test-size", "data/", 86400, 1024)
+        .await?;
+    assert!(stats.exists, "expected 1 object");
+    assert!(!stats.any_large_enough, "size should be below threshold");
 
     Ok(())
 }
@@ -63,11 +61,11 @@ async fn prefix_not_found() -> anyhow::Result<()> {
     let env = helpers::start_minio().await?;
     env.create_bucket("test-empty").await?;
 
-    let objects = env
+    let stats = env
         .monitor
-        .objects("test-empty", "missing/prefix/", 86400)
+        .check_storage("test-empty", "missing/prefix/", 86400, 0)
         .await?;
-    assert!(objects.is_empty(), "expected no objects for missing prefix");
+    assert!(!stats.exists, "expected no objects for missing prefix");
 
     Ok(())
 }
@@ -82,15 +80,15 @@ async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
 
     let present = env
         .monitor
-        .objects("test-multi-prefix", "present/", 86400)
+        .check_storage("test-multi-prefix", "present/", 86400, 0)
         .await?;
     let missing = env
         .monitor
-        .objects("test-multi-prefix", "absent/", 86400)
+        .check_storage("test-multi-prefix", "absent/", 86400, 0)
         .await?;
 
-    assert_eq!(present.len(), 1, "expected 1 object under 'present/'");
-    assert!(missing.is_empty(), "expected 0 objects under 'absent/'");
+    assert!(present.exists, "expected 1 object under 'present/'");
+    assert!(!missing.exists, "expected 0 objects under 'absent/'");
 
     Ok(())
 }
@@ -107,14 +105,17 @@ async fn multiple_buckets_independent() -> anyhow::Result<()> {
     env.put_object("bucket-beta", "backups/db.dump", b"backup content")
         .await?;
 
-    let alpha = env.monitor.objects("bucket-alpha", "logs/", 86400).await?;
+    let alpha = env
+        .monitor
+        .check_storage("bucket-alpha", "logs/", 86400, 0)
+        .await?;
     let beta = env
         .monitor
-        .objects("bucket-beta", "backups/", 86400)
+        .check_storage("bucket-beta", "backups/", 86400, 0)
         .await?;
 
-    assert_eq!(alpha.len(), 1, "expected 1 object in bucket-alpha");
-    assert_eq!(beta.len(), 1, "expected 1 object in bucket-beta");
+    assert!(alpha.exists, "expected 1 object in bucket-alpha");
+    assert!(beta.exists, "expected 1 object in bucket-beta");
 
     Ok(())
 }

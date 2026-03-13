@@ -53,22 +53,21 @@ async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> C
     let mut size_mismatch = false;
     let mut error = false;
 
-    match monitor.objects(&bucket, &file.prefix, file.age).await {
-        Ok(objects) => {
-            if !objects.is_empty() {
-                exist = true;
-            }
-            for o in &objects {
-                if file.size > 0
-                    && let Some(size) = o.size()
-                    && size < file.size
-                {
-                    size_mismatch = true;
-                }
+    match monitor
+        .check_storage(&bucket, &file.prefix, file.age, file.size)
+        .await
+    {
+        Ok(stats) => {
+            exist = stats.exists;
+            if exist && file.size > 0 {
+                size_mismatch = !stats.any_large_enough;
             }
         }
         Err(e) => {
-            eprintln!("Error: {e}");
+            tracing::error!(
+                "Error checking bucket='{bucket}' prefix='{}': {e}",
+                file.prefix
+            );
             error = true;
         }
     }
@@ -209,6 +208,45 @@ mod tests {
         assert!(!result.exist);
         assert!(!result.error);
         assert!(!result.size_mismatch);
+    }
+
+    #[tokio::test]
+    async fn check_object_mixed_sizes() {
+        let last_modified = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let body = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+              <Name>cubeta</Name>
+              <Prefix>E</Prefix>
+              <KeyCount>2</KeyCount>
+              <MaxKeys>1000</MaxKeys>
+              <IsTruncated>false</IsTruncated>
+              <Contents>
+                <Key>SmallObject.txt</Key>
+                <LastModified>{last_modified}</LastModified>
+                <Size>500</Size>
+              </Contents>
+              <Contents>
+                <Key>LargeObject.txt</Key>
+                <LastModified>{last_modified}</LastModified>
+                <Size>2000</Size>
+              </Contents>
+            </ListBucketResult>"#
+        );
+
+        let monitor = Arc::new(make_monitor(200, &body));
+        let file = config::Object {
+            prefix: "E".to_string(),
+            age: 30,
+            size: 1024,
+        };
+        let result = check(&monitor, "cubeta".to_string(), file).await;
+        assert!(result.exist);
+        assert!(!result.error);
+        assert!(
+            !result.size_mismatch,
+            "Should NOT be a mismatch since one object is large enough"
+        );
     }
 
     #[tokio::test]

@@ -2,13 +2,17 @@ use crate::config;
 use anyhow::Result;
 use aws_credential_types::Credentials;
 use aws_sdk_s3::Client;
-use aws_sdk_s3::types::Object;
 use aws_smithy_http_client::Builder as HttpClientBuilder;
 use aws_smithy_http_client::tls;
 use chrono::prelude::Utc;
 
 pub struct Monitor {
     pub s3: Client,
+}
+
+pub struct CheckStats {
+    pub exists: bool,
+    pub any_large_enough: bool,
 }
 
 impl Monitor {
@@ -63,33 +67,54 @@ impl Monitor {
         })
     }
 
-    /// List objects in `bucket` under `prefix` that are newer than `age` seconds.
+    /// Check objects in `bucket` under `prefix` that are newer than `age` seconds.
     ///
     /// # Errors
     ///
     /// Returns an error if the S3 API call fails.
-    pub async fn objects(&self, bucket: &str, prefix: &str, age: i64) -> Result<Vec<Object>> {
+    pub async fn check_storage(
+        &self,
+        bucket: &str,
+        prefix: &str,
+        age: i64,
+        min_size: i64,
+    ) -> Result<CheckStats> {
         let cutoff = (Utc::now()
             - chrono::Duration::try_seconds(age)
                 .ok_or_else(|| anyhow::anyhow!("invalid age value: {age}"))?)
         .timestamp();
 
-        let result = self
+        let mut exists = false;
+        let mut any_large_enough = false;
+
+        let mut paginator = self
             .s3
             .list_objects_v2()
             .bucket(bucket)
             .prefix(prefix)
-            .send()
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))?;
+            .into_paginator()
+            .send();
 
-        let objects = result
-            .contents()
-            .iter()
-            .filter(|obj| obj.last_modified().is_some_and(|lm| lm.secs() > cutoff))
-            .cloned()
-            .collect::<Vec<_>>();
+        while let Some(page) = paginator.next().await {
+            let page = page.map_err(|e| anyhow::anyhow!("{e}"))?;
+            for obj in page.contents() {
+                if obj.last_modified().is_some_and(|lm| lm.secs() > cutoff) {
+                    exists = true;
+                    if min_size <= 0 || obj.size().is_some_and(|s| s >= min_size) {
+                        any_large_enough = true;
+                    }
+                }
+            }
+            // Optimization: if we already found a large enough object, and we only care
+            // about existence and size, we can stop if we don't need to count them.
+            if exists && (min_size <= 0 || any_large_enough) {
+                break;
+            }
+        }
 
-        Ok(objects)
+        Ok(CheckStats {
+            exists,
+            any_large_enough,
+        })
     }
 }
