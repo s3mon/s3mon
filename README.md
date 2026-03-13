@@ -1,6 +1,6 @@
 # s3mon
 
-[![Test & Build](https://github.com/s3mon/s3mon/workflows/Test%20%26%20Build/badge.svg)](https://github.com/s3mon/s3mon/actions)
+[![Test & Build](https://github.com/s3mon/s3mon/actions/workflows/build.yml/badge.svg)](https://github.com/s3mon/s3mon/actions/workflows/build.yml)
 [![codecov](https://codecov.io/gh/s3mon/s3mon/branch/main/graph/badge.svg)](https://codecov.io/gh/s3mon/s3mon)
 [![Crates.io](https://img.shields.io/crates/v/s3mon.svg)](https://crates.io/crates/s3mon)
 [![Downloads](https://img.shields.io/crates/d/s3mon.svg)](https://crates.io/crates/s3mon)
