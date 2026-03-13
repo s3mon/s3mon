@@ -1,27 +1,74 @@
 [package]
 name = "s3mon"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "monitor s3 buckets for missing files"
-documentation = "https://s3mon.dev"
-homepage = "https://s3mon.dev"
+homepage = "https://github.com/s3mon/s3mon"
+repository = "https://github.com/s3mon/s3mon"
 readme = "README.md"
 keywords = ["s3", "files", "backup", "monitor", "bucket"]
 categories = ["command-line-utilities", "command-line-interface"]
 license = "BSD-3-Clause"
-edition = "2018"
+edition = "2024"
 
-[badges]
-travis-ci = { repository = "s3mon/s3mon", branch = "master" }
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+# Allow unstable/opinionated lints (lower priority so individual lints can override)
+nursery = { level = "allow", priority = -1 }
+
+# Enforce pedantic lints
+pedantic = "deny"
+
+# Core lint groups
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+perf = "deny"
+complexity = "deny"
+
+# Safety-critical lints
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+await_holding_lock = "deny"
+
+# Performance + memory reliability
+needless_borrow = "deny"
+needless_collect = "deny"
+large_stack_arrays = "deny"
 
 [dependencies]
+anyhow = "1"
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-credential-types = { version = "1", features = ["hardcoded-credentials"] }
+aws-sdk-s3 = "1"
 chrono = "0.4"
-clap = "2.33"
-env_logger = "0.7"
-futures = "0.1.29"
-rusoto_core = "0.42.0"
-rusoto_credential = "0.42.0"
-rusoto_mock = "0.42.0"
-rusoto_s3 = "0.42.0"
+clap = "4"
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[build-dependencies]
+built = { version = "0.8", features = ["git2"] }
+
+[dev-dependencies]
+aws-smithy-runtime = { version = "1", features = ["test-util"] }
+aws-smithy-types = "1"
+http = "1"
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/s3mon", dest = "/usr/bin/s3mon", mode = "0755" },
+]
+
+[package.metadata.deb]
+assets = [
+    ["target/release/s3mon", "/usr/bin/s3mon", "755"],
+]
+depends = ""
+maintainer-scripts = "contrib/debian"

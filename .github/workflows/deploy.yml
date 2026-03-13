@@ -1,0 +1,128 @@
+---
+name: Deploy
+
+on:
+  push:
+    tags:
+      - '*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    name: Build and release
+    runs-on: ${{ matrix.os }}
+    needs: test
+    permissions:
+      contents: write
+
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Get the release version from the tag
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: deploy-${{ matrix.target }}
+
+      - run: sudo apt -y install musl-dev musl-tools
+        if: matrix.build == 'linux'
+
+      - name: Install `cargo-generate-rpm` and `cargo-deb`
+        if: matrix.build == 'linux'
+        run: |
+          cargo install --locked cargo-generate-rpm
+          cargo install --locked cargo-deb
+
+      - name: Build Linux
+        if: matrix.build == 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Generate RPM and DEB
+        if: matrix.build == 'linux'
+        run: |
+          mkdir -p target/release
+          cp target/${{ matrix.target }}/release/s3mon ./target/release/s3mon
+          strip -s ./target/release/s3mon
+
+          cargo generate-rpm
+          RPM_PATH=$(find target/generate-rpm/ -name "*.rpm" -print -quit)
+          echo "RPM_ASSET=$RPM_PATH" >> $GITHUB_ENV
+
+          cargo deb --no-build --target ${{ matrix.target }}
+          DEB_PATH=$(find target -name "*.deb" -print -quit)
+          echo "DEB_ASSET=$DEB_PATH" >> $GITHUB_ENV
+
+      - name: Build
+        if: matrix.build != 'linux'
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          binary_name="s3mon"
+          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          mkdir "$dirname"
+          mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          tar -czf "$dirname.tar.gz" "$dirname"
+          echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |-
+            ${{ env.ASSET }}
+            ${{ env.RPM_ASSET }}
+            ${{ env.DEB_ASSET }}
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          save-if: false
+
+      - run: cargo publish --locked --token ${CRATES_TOKEN}
+        env:
+          CRATES_TOKEN: ${{ secrets.CRATES_TOKEN }}

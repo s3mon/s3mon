@@ -1,69 +1,86 @@
-use crate::auth;
 use crate::config;
-use chrono::prelude::{DateTime, Utc};
-use rusoto_core::region::ParseRegionError;
-use rusoto_core::request::HttpClient;
-use rusoto_core::Region;
-use rusoto_s3::{ListObjectsV2Request, Object, S3Client, S3};
+use anyhow::Result;
+use aws_credential_types::Credentials;
+use aws_sdk_s3::Client;
+use aws_sdk_s3::types::Object;
+use chrono::prelude::Utc;
 
 pub struct Monitor {
-    pub s3: S3Client,
+    pub s3: Client,
 }
 
 impl Monitor {
-    pub fn new(config: &config::Config) -> Result<Self, ParseRegionError> {
-        let chain = auth::Auth::new(
-            config.s3mon.access_key.to_string(),
-            config.s3mon.secret_key.to_string(),
-        );
+    /// Create a new S3 monitor client from the given configuration.
+    ///
+    /// Credential resolution order:
+    /// 1. If `access_key` and `secret_key` are both non-empty in the config,
+    ///    those static credentials are used directly.
+    /// 2. Otherwise the AWS default credential chain is used (environment
+    ///    variables, instance profiles, etc.).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the AWS configuration cannot be loaded.
+    pub async fn new(config: &config::Config) -> Result<Self> {
+        let mut cfg_builder = aws_config::defaults(aws_config::BehaviorVersion::latest());
 
-        let region = if config.s3mon.endpoint.is_empty() && !config.s3mon.region.is_empty() {
-            config.s3mon.region.parse()?
-        } else {
-            Region::Custom {
-                name: config.s3mon.region.to_owned(),
-                endpoint: config.s3mon.endpoint.to_owned(),
-            }
-        };
+        if !config.s3mon.access_key.is_empty() && !config.s3mon.secret_key.is_empty() {
+            let creds = Credentials::new(
+                &config.s3mon.access_key,
+                &config.s3mon.secret_key,
+                None,
+                None,
+                "s3mon-config",
+            );
+            cfg_builder = cfg_builder.credentials_provider(creds);
+        }
+
+        if !config.s3mon.region.is_empty() {
+            cfg_builder = cfg_builder.region(aws_config::Region::new(config.s3mon.region.clone()));
+        }
+
+        let aws_cfg = cfg_builder.load().await;
+
+        let mut s3_builder = aws_sdk_s3::Config::from(&aws_cfg).to_builder();
+
+        if !config.s3mon.endpoint.is_empty() {
+            s3_builder = s3_builder
+                .endpoint_url(&config.s3mon.endpoint)
+                .force_path_style(true);
+        }
 
         Ok(Self {
-            s3: rusoto_s3::S3Client::new_with(
-                HttpClient::new().expect("failed to create request dispatcher"),
-                chain,
-                region,
-            ),
+            s3: Client::from_conf(s3_builder.build()),
         })
     }
 
-    pub fn objects(&self, bucket: String, prefix: String, age: i64) -> Result<Vec<Object>, String> {
-        let now = Utc::now();
-        let age = now - chrono::Duration::seconds(age);
+    /// List objects in `bucket` under `prefix` that are newer than `age` seconds.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the S3 API call fails.
+    pub async fn objects(&self, bucket: &str, prefix: &str, age: i64) -> Result<Vec<Object>> {
+        let cutoff = (Utc::now()
+            - chrono::Duration::try_seconds(age)
+                .ok_or_else(|| anyhow::anyhow!("invalid age value: {age}"))?)
+        .timestamp();
 
-        let list_objects_req = ListObjectsV2Request {
-            bucket,
-            prefix: Some(prefix),
-            ..Default::default()
-        };
+        let result = self
+            .s3
+            .list_objects_v2()
+            .bucket(bucket)
+            .prefix(prefix)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-        let objects = match self.s3.list_objects_v2(list_objects_req).sync() {
-            // loop over the results parsing the last_modified and converting
-            // to unix timestamp and then return only objects < the defined age
-            Ok(result) => result
-                .contents
-                .unwrap_or_default()
-                .into_iter()
-                .filter(move |obj| {
-                    DateTime::parse_from_rfc3339(
-                        obj.last_modified.clone().unwrap_or_default().as_str(),
-                    )
-                    .ok()
-                    .into_iter()
-                    .map(|parsed| parsed.timestamp())
-                    .any(|last_modified| last_modified > age.timestamp())
-                })
-                .collect::<Vec<_>>(),
-            Err(e) => return Err(e.to_string()),
-        };
+        let objects = result
+            .contents()
+            .iter()
+            .filter(|obj| obj.last_modified().is_some_and(|lm| lm.secs() > cutoff))
+            .cloned()
+            .collect::<Vec<_>>();
+
         Ok(objects)
     }
 }
