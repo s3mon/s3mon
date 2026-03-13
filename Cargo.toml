@@ -72,3 +72,8 @@ assets = [
 ]
 depends = ""
 maintainer-scripts = "contrib/debian"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
