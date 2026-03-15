@@ -15,7 +15,7 @@ async fn object_exists_and_fresh() -> anyhow::Result<()> {
 
     let stats = env
         .monitor
-        .check_storage("test-fresh", "data/", 86400, 0)
+        .check_storage("test-fresh", "data/", "", 86400, 0)
         .await?;
     assert!(stats.exists, "expected exactly 1 fresh object");
 
@@ -35,7 +35,7 @@ async fn object_exists_age_expired() -> anyhow::Result<()> {
 
     let stats = env
         .monitor
-        .check_storage("test-expired", "data/", 0, 0)
+        .check_storage("test-expired", "data/", "", 0, 0)
         .await?;
     assert!(!stats.exists, "expected no objects with age=0");
 
@@ -56,7 +56,7 @@ async fn object_size_below_threshold() -> anyhow::Result<()> {
 
     let stats = env
         .monitor
-        .check_storage("test-size", "data/", 86400, 1024)
+        .check_storage("test-size", "data/", "", 86400, 1024)
         .await?;
     assert!(stats.exists, "expected 1 object");
     assert!(!stats.any_large_enough, "size should be below threshold");
@@ -75,7 +75,7 @@ async fn prefix_not_found() -> anyhow::Result<()> {
 
     let stats = env
         .monitor
-        .check_storage("test-empty", "missing/prefix/", 86400, 0)
+        .check_storage("test-empty", "missing/prefix/", "", 86400, 0)
         .await?;
     assert!(!stats.exists, "expected no objects for missing prefix");
 
@@ -95,11 +95,11 @@ async fn multiple_prefixes_one_missing() -> anyhow::Result<()> {
 
     let present = env
         .monitor
-        .check_storage("test-multi-prefix", "present/", 86400, 0)
+        .check_storage("test-multi-prefix", "present/", "", 86400, 0)
         .await?;
     let missing = env
         .monitor
-        .check_storage("test-multi-prefix", "absent/", 86400, 0)
+        .check_storage("test-multi-prefix", "absent/", "", 86400, 0)
         .await?;
 
     assert!(present.exists, "expected 1 object under 'present/'");
@@ -125,15 +125,105 @@ async fn multiple_buckets_independent() -> anyhow::Result<()> {
 
     let alpha = env
         .monitor
-        .check_storage("bucket-alpha", "logs/", 86400, 0)
+        .check_storage("bucket-alpha", "logs/", "", 86400, 0)
         .await?;
     let beta = env
         .monitor
-        .check_storage("bucket-beta", "backups/", 86400, 0)
+        .check_storage("bucket-beta", "backups/", "", 86400, 0)
         .await?;
 
     assert!(alpha.exists, "expected 1 object in bucket-alpha");
     assert!(beta.exists, "expected 1 object in bucket-beta");
+
+    Ok(())
+}
+
+/// Omitting suffix keeps the historical prefix-only behavior.
+#[tokio::test]
+async fn empty_suffix_behaves_like_prefix_only() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("test-empty-suffix").await?;
+    env.put_object(
+        "test-empty-suffix",
+        "postgresql-2026-02-09_1826.log",
+        b"log entry",
+    )
+    .await?;
+
+    let stats = env
+        .monitor
+        .check_storage("test-empty-suffix", "postgresql-", "", 86400, 0)
+        .await?;
+
+    assert!(
+        stats.exists,
+        "expected prefix-only match when suffix is omitted"
+    );
+
+    Ok(())
+}
+
+/// Prefix is handled by S3; suffix is filtered client-side on the returned keys.
+#[tokio::test]
+async fn suffix_filter_matches_expected_keys() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("test-suffix").await?;
+
+    env.put_object(
+        "test-suffix",
+        "postgresql-2026-02-09_1826.log",
+        b"log entry",
+    )
+    .await?;
+    env.put_object(
+        "test-suffix",
+        "postgresql-2026-02-09_1826.txt",
+        b"text entry",
+    )
+    .await?;
+
+    let present = env
+        .monitor
+        .check_storage("test-suffix", "postgresql-", ".log", 86400, 0)
+        .await?;
+    let missing = env
+        .monitor
+        .check_storage("test-suffix", "postgresql-", ".csv", 86400, 0)
+        .await?;
+
+    assert!(present.exists, "expected matching .log object");
+    assert!(!missing.exists, "expected no matching .csv object");
+
+    Ok(())
+}
+
+/// A matching suffix still has to satisfy the age filter.
+#[tokio::test]
+async fn suffix_match_still_requires_fresh_object() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("test-suffix-age").await?;
+
+    env.put_object("test-suffix-age", "postgresql-2026-02-09_1826.log", b"log")
+        .await?;
+
+    let stats = env
+        .monitor
+        .check_storage("test-suffix-age", "postgresql-", ".log", 0, 0)
+        .await?;
+
+    assert!(
+        !stats.exists,
+        "expected no match when suffix matches but object is outside the age window"
+    );
 
     Ok(())
 }
@@ -169,6 +259,42 @@ s3mon:
 }
 
 #[tokio::test]
+async fn execute_monitor_suffix_match_is_ok() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("exec-suffix-ok").await?;
+    env.put_object("exec-suffix-ok", "postgresql-2026-02-09_1826.log", b"log")
+        .await?;
+
+    let result = helpers::execute_monitor(
+        &env,
+        r#"---
+s3mon:
+  endpoint: __ENDPOINT__
+  region: us-east-1
+  access_key: minioadmin
+  secret_key: minioadmin
+  buckets:
+    exec-suffix-ok:
+      - prefix: postgresql-
+        suffix: .log
+        age: 86400
+"#,
+        true,
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "matching suffix should pass with the exit flag"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn execute_monitor_missing_prefix_fails_with_exit_on_check_failure() -> anyhow::Result<()> {
     if !helpers::has_container_runtime() {
         return Ok(());
@@ -196,6 +322,50 @@ s3mon:
     assert!(
         result.is_err(),
         "missing objects should fail with the exit flag"
+    );
+    assert_eq!(
+        result.err().map(|err| err.to_string()),
+        Some("one or more checks failed".to_string())
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_monitor_missing_suffix_fails_with_exit_on_check_failure() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("exec-suffix-missing").await?;
+    env.put_object(
+        "exec-suffix-missing",
+        "postgresql-2026-02-09_1826.txt",
+        b"text",
+    )
+    .await?;
+
+    let result = helpers::execute_monitor(
+        &env,
+        r#"---
+s3mon:
+  endpoint: __ENDPOINT__
+  region: us-east-1
+  access_key: minioadmin
+  secret_key: minioadmin
+  buckets:
+    exec-suffix-missing:
+      - prefix: postgresql-
+        suffix: .log
+        age: 86400
+"#,
+        true,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "non-matching suffix should fail with the exit flag"
     );
     assert_eq!(
         result.err().map(|err| err.to_string()),

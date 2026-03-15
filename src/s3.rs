@@ -76,6 +76,7 @@ impl Monitor {
         &self,
         bucket: &str,
         prefix: &str,
+        suffix: &str,
         age: i64,
         min_size: i64,
     ) -> Result<CheckStats> {
@@ -98,7 +99,10 @@ impl Monitor {
         while let Some(page) = paginator.next().await {
             let page = page.map_err(|e| anyhow::anyhow!("{e}"))?;
             for obj in page.contents() {
-                if obj.last_modified().is_some_and(|lm| lm.secs() > cutoff) {
+                let matches_suffix =
+                    suffix.is_empty() || obj.key().is_some_and(|key| key.ends_with(suffix));
+
+                if matches_suffix && obj.last_modified().is_some_and(|lm| lm.secs() > cutoff) {
                     exists = true;
                     if min_size <= 0 || obj.size().is_some_and(|s| s >= min_size) {
                         any_large_enough = true;

@@ -107,13 +107,14 @@ the metrics first, then exit with status `1`.
 ```yaml
 # /etc/s3mon.yml
 s3mon:
-  endpoint: s3.provider.tld   # omit when using AWS (set region instead)
-  region: eu-central-1        # AWS region, or any label for custom endpoints
+  endpoint: https://s3.provider.tld # full URL; omit when using AWS
+  region: eu-central-1              # set for AWS and custom endpoints
   access_key: ACCESS_KEY_ID   # leave empty to use the AWS default credential chain
   secret_key: SECRET_ACCESS_KEY
   buckets:
     bucket_A:
       - prefix: backups/daily   # S3 key prefix to look for
+        suffix: .log            # optional key suffix filter, matched client-side
         age: 86400              # max age in seconds (default: 86400 = 24 h)
         size: 30720             # minimum expected size in bytes (0 = skip check)
     bucket_B:
@@ -128,13 +129,20 @@ s3mon:
 
 | Field        | Required | Default | Description                                              |
 |--------------|----------|---------|----------------------------------------------------------|
-| `endpoint`   | No       | —       | Custom S3-compatible endpoint (MinIO, DigitalOcean, etc) |
-| `region`     | No       | —       | AWS region name, or any label for custom endpoints       |
+| `endpoint`   | No       | —       | Full custom S3-compatible endpoint URL, including scheme |
+| `region`     | No       | —       | Region/signing label; set it for AWS and custom endpoints |
 | `access_key` | No       | —       | Static credentials; falls back to AWS default chain      |
 | `secret_key` | No       | —       | Static credentials; falls back to AWS default chain      |
 | `prefix`     | **Yes**  | —       | S3 key prefix to search under                            |
+| `suffix`     | No       | `""`    | Optional key suffix to match after the prefix listing    |
 | `age`        | No       | `86400` | Maximum age of acceptable objects, in seconds            |
 | `size`       | No       | `0`     | Minimum acceptable object size in bytes (`0` = disabled) |
+
+For S3-compatible vendors, `endpoint` should include the scheme, for example
+`https://minio.example.com`. `region` is still needed as a non-empty value for
+request signing; many vendors accept any label such as `us-east-1` or `CH`.
+`suffix` is applied client-side after the S3 `prefix` listing, so the most
+efficient setup is still to choose the narrowest useful prefix.
 
 ### Credential resolution
 
@@ -162,12 +170,13 @@ s3mon:
 ```yaml
 s3mon:
   endpoint: https://minio.example.com
-  region: us-east-1       # required but can be any non-empty string
+  region: us-east-1       # required, but many vendors accept any non-empty string
   access_key: minioadmin
   secret_key: minioadmin
   buckets:
     my-bucket:
-      - prefix: backups/
+      - prefix: postgresql-
+        suffix: .log
         age: 3600
 ```
 

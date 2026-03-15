@@ -1,12 +1,13 @@
 ---
 s3mon:
-  endpoint: s3.provider.tld # if using AWS just define the region
-  region: eu-central-1 # only for AWS, can skip the endpoint
+  endpoint: https://s3.provider.tld # full URL; if using AWS just define the region
+  region: eu-central-1 # set for AWS and custom endpoints; many vendors accept any non-empty label
   access_key: ACCESS_KEY_ID
   secret_key: SECRET_ACCESS_KEY
   buckets:
     bucket_A:
       - prefix: test
+        suffix: .log
         age: 86400
         size: 30720
     bucket_B:

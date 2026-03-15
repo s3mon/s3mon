@@ -69,7 +69,7 @@ async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> C
     let mut error = false;
 
     match monitor
-        .check_storage(&bucket, &file.prefix, file.age, file.size)
+        .check_storage(&bucket, &file.prefix, &file.suffix, file.age, file.size)
         .await
     {
         Ok(stats) => {
@@ -90,6 +90,7 @@ async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> C
     CheckResult {
         bucket,
         prefix: file.prefix,
+        suffix: file.suffix,
         exist,
         error,
         size_mismatch,
@@ -153,6 +154,7 @@ mod tests {
         let monitor = Arc::new(make_monitor(200, &body));
         let file = config::Object {
             prefix: "E".to_string(),
+            suffix: String::new(),
             age: 30,
             size: 0,
         };
@@ -186,6 +188,7 @@ mod tests {
         let monitor = Arc::new(make_monitor(200, &body));
         let file = config::Object {
             prefix: "E".to_string(),
+            suffix: String::new(),
             age: 30,
             size: 1024,
         };
@@ -216,6 +219,7 @@ mod tests {
         let monitor = Arc::new(make_monitor(200, body));
         let file = config::Object {
             prefix: "E".to_string(),
+            suffix: String::new(),
             age: 30,
             size: 1024,
         };
@@ -252,6 +256,7 @@ mod tests {
         let monitor = Arc::new(make_monitor(200, &body));
         let file = config::Object {
             prefix: "E".to_string(),
+            suffix: String::new(),
             age: 30,
             size: 1024,
         };
@@ -276,6 +281,7 @@ mod tests {
         let monitor = Arc::new(make_monitor(404, body));
         let file = config::Object {
             prefix: "E".to_string(),
+            suffix: String::new(),
             age: 30,
             size: 512,
         };
@@ -290,6 +296,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "bucket".to_string(),
             prefix: "missing/".to_string(),
+            suffix: String::new(),
             exist: false,
             error: false,
             size_mismatch: false,
@@ -303,6 +310,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "bucket".to_string(),
             prefix: "prefix/".to_string(),
+            suffix: String::new(),
             exist: false,
             error: true,
             size_mismatch: false,
@@ -316,6 +324,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "bucket".to_string(),
             prefix: "prefix/".to_string(),
+            suffix: String::new(),
             exist: true,
             error: false,
             size_mismatch: true,
@@ -329,6 +338,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "bucket".to_string(),
             prefix: "prefix/".to_string(),
+            suffix: String::new(),
             exist: true,
             error: false,
             size_mismatch: false,
@@ -342,6 +352,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "cubeta".to_string(),
             prefix: "E".to_string(),
+            suffix: String::new(),
             exist: true,
             error: false,
             size_mismatch: false,
@@ -357,6 +368,7 @@ mod tests {
         let results = vec![CheckResult {
             bucket: "cubeta".to_string(),
             prefix: "E".to_string(),
+            suffix: String::new(),
             exist: true,
             error: false,
             size_mismatch: false,

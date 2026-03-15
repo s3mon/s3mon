@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0] - 2026-03-15
+
+- Added optional `suffix` matching so checks can combine a server-side `prefix` with a client-side suffix filter such as `.log`.
+- Clarified custom S3 endpoint configuration: custom endpoints should include the URL scheme and set a non-empty `region`/signing label.
+- Added coverage for suffix matching across unit and integration tests.
+- Metrics and Influx output now include a `suffix` label/tag only for checks with a non-empty suffix.
+
 ## [0.6.0] - 2026-03-15
 
 - Added `--exit-on-check-failure` to return exit status `1` when any check reports a missing object, an S3 API error, or a size mismatch.

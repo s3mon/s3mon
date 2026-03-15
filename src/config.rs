@@ -22,6 +22,8 @@ pub struct Data {
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Object {
     pub prefix: String,
+    #[serde(default)]
+    pub suffix: String,
     #[serde(default = "default_age")]
     pub age: i64,
     #[serde(default)]
@@ -51,6 +53,7 @@ s3mon:
         age: 43200
       - prefix: bar
       - prefix: baz
+        suffix: .log
         size: 1024
         ";
         let mut buckets = std::collections::BTreeMap::new();
@@ -59,16 +62,19 @@ s3mon:
             vec![
                 Object {
                     prefix: "foo".to_string(),
+                    suffix: String::new(),
                     age: 43200,
                     size: 0,
                 },
                 Object {
                     prefix: "bar".to_string(),
+                    suffix: String::new(),
                     age: 86400,
                     size: 0,
                 },
                 Object {
                     prefix: "baz".to_string(),
+                    suffix: ".log".to_string(),
                     age: 86400,
                     size: 1024,
                 },
