@@ -3,7 +3,9 @@
 
 use aws_smithy_types::byte_stream::ByteStream;
 use s3mon::{
+    cli::actions::{self, Action},
     config::{Config, Data},
+    output::OutputFormat,
     s3::Monitor,
 };
 use std::collections::BTreeMap;
@@ -15,6 +17,7 @@ use testcontainers_modules::minio::MinIO;
 /// The container is stopped when this value is dropped.
 pub struct MinioEnv {
     pub monitor: Monitor,
+    pub endpoint: String,
     _container: ContainerAsync<MinIO>,
 }
 
@@ -99,7 +102,7 @@ pub async fn start_minio() -> anyhow::Result<MinioEnv> {
 
     let config = Config {
         s3mon: Data {
-            endpoint,
+            endpoint: endpoint.clone(),
             region: "us-east-1".to_string(),
             access_key: "minioadmin".to_string(),
             secret_key: "minioadmin".to_string(),
@@ -111,6 +114,7 @@ pub async fn start_minio() -> anyhow::Result<MinioEnv> {
 
     Ok(MinioEnv {
         monitor,
+        endpoint,
         _container: container,
     })
 }
@@ -139,4 +143,48 @@ impl MinioEnv {
             .await?;
         Ok(())
     }
+}
+
+struct TempConfigFile {
+    path: std::path::PathBuf,
+}
+
+impl TempConfigFile {
+    fn new(contents: &str) -> anyhow::Result<Self> {
+        let path = std::env::temp_dir().join(format!(
+            "s3mon-test-{}-{}.yml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)?
+                .as_nanos()
+        ));
+        std::fs::write(&path, contents)?;
+        Ok(Self { path })
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for TempConfigFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+pub async fn execute_monitor(
+    env: &MinioEnv,
+    config_body: &str,
+    exit_on_check_failure: bool,
+) -> anyhow::Result<()> {
+    let config_file = TempConfigFile::new(&config_body.replace("__ENDPOINT__", &env.endpoint))?;
+
+    let action = Action::Monitor {
+        config: config_file.path().to_path_buf(),
+        format: OutputFormat::Prometheus,
+        exit_on_check_failure,
+    };
+
+    actions::run::execute(&action).await
 }

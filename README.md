@@ -78,13 +78,14 @@ cargo build --release
 ## Usage
 
 ```
-s3mon -c config.yml [--format prometheus|influxdb]
+s3mon -c config.yml [--format prometheus|influxdb] [--exit-on-check-failure]
 ```
 
 ```
 Options:
   -c, --config <FILE>         Path to configuration YAML file [required]
   -f, --format <FORMAT>       Output format: prometheus (default) or influxdb
+      --exit-on-check-failure Exit with status 1 if any check is missing, errors, or size-mismatched
   -v, --verbose               Increase log verbosity (-v INFO, -vv DEBUG, -vvv TRACE)
   -h, --help                  Print help
   -V, --version               Print version
@@ -96,6 +97,10 @@ redirected independently:
 ```sh
 s3mon -c config.yml 2>/var/log/s3mon.log
 ```
+
+If you want cron or systemd timers to alert on missing objects, S3 API errors,
+or size mismatches, add `--exit-on-check-failure`.  `s3mon` will still print
+the metrics first, then exit with status `1`.
 
 ## Configuration
 
@@ -178,12 +183,17 @@ Two main integration patterns exist.  Choose based on what you already run:
 | You have | Best path | Format |
 |---|---|---|
 | node_exporter on the host | textfile collector | `prometheus` (default) |
-| vmagent on the host, no node_exporter | direct push to vmagent | `influxdb` |
+| vmagent on the host, no node_exporter | direct push to vmagent | `prometheus` or `influxdb` |
 | vmagent + node_exporter | either works; textfile is simpler | `prometheus` |
 
 ---
 
 ### Path A — node_exporter textfile collector
+
+This is the recommended way to get `s3mon` metrics into Prometheus.
+Prometheus is pull-based: `s3mon` writes a `.prom` file, `node_exporter`
+serves it on `/metrics`, and Prometheus scrapes `node_exporter`.  You do not
+POST Prometheus text format directly to the Prometheus server.
 
 **How it works:**
 
@@ -193,9 +203,9 @@ cron
                                       ↓
                           node_exporter textfile collector
                                       ↓  (HTTP scrape)
-                                  vmagent
-                                      ↓  (remote_write)
-                              Cortex / VictoriaMetrics
+                          Prometheus / vmagent scraper
+                                      ↓
+                        Prometheus TSDB / remote_write
 ```
 
 node_exporter's textfile collector watches a directory for `*.prom` files and
@@ -237,9 +247,187 @@ The `&&` means if `s3mon` fails the old `.prom` is preserved intact.
 curl -s http://localhost:9100/metrics | grep s3mon
 ```
 
+**4. Add the Prometheus scrape job** (`prometheus.yml`):
+
+```yaml
+scrape_configs:
+  - job_name: node
+    static_configs:
+      - targets:
+          - localhost:9100
+```
+
+If Prometheus is already scraping `node_exporter`, `s3mon` metrics appear
+automatically once the `.prom` file exists.  No special `s3mon` scrape job is
+needed because the metrics are exposed as part of the normal `node_exporter`
+target.
+
+**5. Verify in Prometheus**:
+
+```promql
+s3mon_object_exists
+```
+
+You should see one series per configured `(bucket, prefix)` pair, with labels
+such as `bucket`, `prefix`, `instance`, and `job`.
+
 ---
 
-### Path B — push directly to vmagent
+### Path B — push directly to vmagent in Prometheus format
+
+**How it works:**
+
+```
+cron
+ └─ s3mon --format prometheus | curl → vmagent :8429/api/v1/import/prometheus
+                                              ↓  (remote_write)
+                                      Cortex / VictoriaMetrics
+```
+
+This keeps the default `prometheus` output format and pushes it straight to
+`vmagent`, which accepts Prometheus exposition text on its import endpoint.
+Use this when you want an HTTP push flow but do not want to switch `s3mon` to
+InfluxDB line protocol.
+
+**Cron job** (`/etc/cron.d/s3mon`):
+
+```cron
+*/5 * * * * root s3mon -c /etc/s3mon.yml \
+  | curl -sf --max-time 10 \
+         -X POST http://localhost:8429/api/v1/import/prometheus \
+         --data-binary @-
+```
+
+`--data-binary @-` preserves the Prometheus payload exactly as written by
+`s3mon`.  `-sf` makes curl silent and treats HTTP errors as failures, while
+`--max-time 10` prevents cron jobs from hanging indefinitely.
+
+**Email alerts for both vmagent and check failures**
+
+If you want cron mail when either:
+
+- `vmagent` is unavailable, or
+- `s3mon` finds a missing object / S3 error / size mismatch,
+
+do not rely on a plain pipeline by itself, because the shell usually returns
+the exit status from `curl`, not from `s3mon`.  Use a wrapper script instead.
+This example is copy-pasteable and sends an HTML email with the relevant logs:
+
+```sh
+#!/bin/sh
+set -u
+
+ERROR_EMAIL="ops@example.com"
+CONFIG_FILE="/etc/s3mon.yml"
+VMAGENT_URL="http://localhost:8429/api/v1/import/prometheus"
+SENDMAIL_BIN="/usr/sbin/sendmail"
+HOSTNAME="$(hostname -f 2>/dev/null || hostname)"
+
+metrics_file="$(mktemp)"
+s3mon_stderr="$(mktemp)"
+curl_stderr="$(mktemp)"
+
+cleanup() {
+  rm -f "$metrics_file" "$s3mon_stderr" "$curl_stderr"
+}
+trap cleanup EXIT
+
+html_escape() {
+  sed \
+    -e 's/&/\&amp;/g' \
+    -e 's/</\&lt;/g' \
+    -e 's/>/\&gt;/g'
+}
+
+s3mon_status=0
+curl_status=0
+
+s3mon -c "$CONFIG_FILE" --exit-on-check-failure \
+  >"$metrics_file" \
+  2>"$s3mon_stderr" || s3mon_status=$?
+
+if [ -s "$metrics_file" ]; then
+  curl -sf --max-time 10 \
+    -X POST "$VMAGENT_URL" \
+    --data-binary @"$metrics_file" \
+    2>"$curl_stderr" || curl_status=$?
+fi
+
+if [ "$s3mon_status" -ne 0 ] || [ "$curl_status" -ne 0 ]; then
+  subject="ALERT: s3mon failure on $HOSTNAME"
+  email_headers=$(
+    cat <<EOF
+To: $ERROR_EMAIL
+Subject: $subject
+Mime-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>
+body { font-family: sans-serif; }
+pre { font-family: monospace; white-space: pre-wrap; margin: 0; }
+</style></head><body>
+EOF
+  )
+
+  {
+    printf '%s\n' "$email_headers"
+    printf '<h2>%s</h2>\n' "$subject"
+    printf '<p><strong>Host:</strong> %s</p>\n' "$HOSTNAME"
+    printf '<p><strong>Config:</strong> %s</p>\n' "$CONFIG_FILE"
+    printf '<p><strong>s3mon exit code:</strong> %s<br>\n' "$s3mon_status"
+    printf '<strong>curl exit code:</strong> %s</p>\n' "$curl_status"
+
+    printf '<h3>s3mon stderr</h3><pre>'
+    if [ -s "$s3mon_stderr" ]; then
+      html_escape <"$s3mon_stderr"
+    else
+      printf 'no stderr output'
+    fi
+    printf '</pre>\n'
+
+    printf '<h3>curl stderr</h3><pre>'
+    if [ -s "$curl_stderr" ]; then
+      html_escape <"$curl_stderr"
+    else
+      printf 'no stderr output'
+    fi
+    printf '</pre>\n'
+
+    printf '<h3>metrics payload</h3><pre>'
+    if [ -s "$metrics_file" ]; then
+      html_escape <"$metrics_file"
+    else
+      printf 'no metrics were produced'
+    fi
+    printf '</pre>\n'
+
+    printf '</body></html>\n'
+  } | "$SENDMAIL_BIN" -t
+
+  exit 1
+fi
+```
+
+Example cron entry:
+
+```cron
+*/5 * * * * root /usr/local/bin/s3mon-vmagent-alert.sh
+```
+
+The script returns `1` if either the push fails or any `s3mon` check failed,
+and sends one HTML email with the `s3mon` stderr, `curl` stderr, and the
+generated metrics payload.
+
+**Verify** — check vmagent received the data:
+
+```sh
+curl -s http://localhost:8429/metrics | grep vmagent_http_requests_total
+curl -s 'http://victoriametrics:8428/api/v1/query?query=s3mon_object_exists'
+```
+
+---
+
+### Path C — push directly to vmagent in InfluxDB format
 
 **How it works:**
 
@@ -292,7 +480,7 @@ label.
 
 ---
 
-### Path C — push to VictoriaMetrics single-node (no vmagent)
+### Path D — push to VictoriaMetrics single-node (no vmagent)
 
 ```cron
 */5 * * * * root s3mon -c /etc/s3mon.yml --format influxdb \

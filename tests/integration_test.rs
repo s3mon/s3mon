@@ -137,3 +137,106 @@ async fn multiple_buckets_independent() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn execute_monitor_missing_prefix_is_ok_by_default() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("exec-default-ok").await?;
+
+    let result = helpers::execute_monitor(
+        &env,
+        r#"---
+s3mon:
+  endpoint: __ENDPOINT__
+  region: us-east-1
+  access_key: minioadmin
+  secret_key: minioadmin
+  buckets:
+    exec-default-ok:
+      - prefix: missing/
+        age: 86400
+"#,
+        false,
+    )
+    .await;
+
+    assert!(result.is_ok(), "missing objects should not fail by default");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_monitor_missing_prefix_fails_with_exit_on_check_failure() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+    env.create_bucket("exec-missing-prefix").await?;
+
+    let result = helpers::execute_monitor(
+        &env,
+        r#"---
+s3mon:
+  endpoint: __ENDPOINT__
+  region: us-east-1
+  access_key: minioadmin
+  secret_key: minioadmin
+  buckets:
+    exec-missing-prefix:
+      - prefix: missing/
+        age: 86400
+"#,
+        true,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "missing objects should fail with the exit flag"
+    );
+    assert_eq!(
+        result.err().map(|err| err.to_string()),
+        Some("one or more checks failed".to_string())
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn execute_monitor_missing_bucket_fails_with_exit_on_check_failure() -> anyhow::Result<()> {
+    if !helpers::has_container_runtime() {
+        return Ok(());
+    }
+    let env = helpers::start_minio().await?;
+
+    let result = helpers::execute_monitor(
+        &env,
+        r#"---
+s3mon:
+  endpoint: __ENDPOINT__
+  region: us-east-1
+  access_key: minioadmin
+  secret_key: minioadmin
+  buckets:
+    bucket-does-not-exist:
+      - prefix: missing/
+        age: 86400
+"#,
+        true,
+    )
+    .await;
+
+    assert!(
+        result.is_err(),
+        "S3 API errors should fail with the exit flag"
+    );
+    assert_eq!(
+        result.err().map(|err| err.to_string()),
+        Some("one or more checks failed".to_string())
+    );
+
+    Ok(())
+}

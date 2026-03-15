@@ -13,7 +13,11 @@ use std::sync::Arc;
 /// S3 client cannot be initialised.
 pub async fn execute(action: &Action) -> Result<()> {
     match action {
-        Action::Monitor { config, format } => {
+        Action::Monitor {
+            config,
+            format,
+            exit_on_check_failure,
+        } => {
             let file = std::fs::File::open(config)
                 .map_err(|e| anyhow::anyhow!("cannot open config '{}': {e}", config.display()))?;
 
@@ -43,9 +47,20 @@ pub async fn execute(action: &Action) -> Result<()> {
             };
 
             print!("{output}");
+
+            if *exit_on_check_failure && has_check_failures(&results) {
+                anyhow::bail!("one or more checks failed");
+            }
+
             Ok(())
         }
     }
+}
+
+fn has_check_failures(results: &[CheckResult]) -> bool {
+    results
+        .iter()
+        .any(|result| result.error || !result.exist || result.size_mismatch)
 }
 
 async fn check(monitor: &s3::Monitor, bucket: String, file: config::Object) -> CheckResult {
@@ -268,6 +283,58 @@ mod tests {
         assert!(!result.exist);
         assert!(result.error);
         assert!(!result.size_mismatch);
+    }
+
+    #[test]
+    fn detects_check_failures_for_missing_objects() {
+        let results = vec![CheckResult {
+            bucket: "bucket".to_string(),
+            prefix: "missing/".to_string(),
+            exist: false,
+            error: false,
+            size_mismatch: false,
+        }];
+
+        assert!(has_check_failures(&results));
+    }
+
+    #[test]
+    fn detects_check_failures_for_api_errors() {
+        let results = vec![CheckResult {
+            bucket: "bucket".to_string(),
+            prefix: "prefix/".to_string(),
+            exist: false,
+            error: true,
+            size_mismatch: false,
+        }];
+
+        assert!(has_check_failures(&results));
+    }
+
+    #[test]
+    fn detects_check_failures_for_size_mismatches() {
+        let results = vec![CheckResult {
+            bucket: "bucket".to_string(),
+            prefix: "prefix/".to_string(),
+            exist: true,
+            error: false,
+            size_mismatch: true,
+        }];
+
+        assert!(has_check_failures(&results));
+    }
+
+    #[test]
+    fn ignores_successful_checks() {
+        let results = vec![CheckResult {
+            bucket: "bucket".to_string(),
+            prefix: "prefix/".to_string(),
+            exist: true,
+            error: false,
+            size_mismatch: false,
+        }];
+
+        assert!(!has_check_failures(&results));
     }
 
     #[test]

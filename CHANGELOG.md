@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.6.0] - 2026-03-15
+
+- Added `--exit-on-check-failure` to return exit status `1` when any check reports a missing object, an S3 API error, or a size mismatch.
+- Documented Prometheus push-to-`vmagent` usage, Prometheus scrape configuration, and copy-pasteable email alert examples.
+- Added integration coverage for the new exit-code behavior to reduce regressions around alert-driven workflows.
+
 ## [0.5.0] - 2026-03-13
 
 - Migrated from `rusoto` to the official [AWS SDK for Rust](https://github.com/awslabs/aws-sdk-rust) (`aws-sdk-s3`, `aws-config`).
@@ -14,4 +20,3 @@
 - Enabled integration tests by default when running `cargo test`.
 - Added RPM and DEB packaging support.
 - Removed legacy CI configuration files (`.travis.yml`, `.circleci`, `.cirrus.yml`).
-

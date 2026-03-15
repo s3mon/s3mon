@@ -10,5 +10,6 @@ pub enum Action {
     Monitor {
         config: PathBuf,
         format: OutputFormat,
+        exit_on_check_failure: bool,
     },
 }

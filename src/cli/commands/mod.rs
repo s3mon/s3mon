@@ -52,6 +52,12 @@ pub fn new() -> Command {
                 .help("Increase log verbosity (-v INFO, -vv DEBUG, -vvv TRACE)")
                 .action(ArgAction::Count),
         )
+        .arg(
+            Arg::new("exit-on-check-failure")
+                .long("exit-on-check-failure")
+                .help("Exit with status 1 if any check is missing, errors, or size-mismatched")
+                .action(ArgAction::SetTrue),
+        )
 }
 
 #[cfg(test)]
@@ -103,5 +109,16 @@ mod tests {
             matches.get_one::<String>("format").map(String::as_str),
             Some("influxdb")
         );
+    }
+
+    #[test]
+    fn test_exit_on_check_failure_flag() {
+        let matches = new().get_matches_from(vec![
+            "s3mon",
+            "-c",
+            "example.yml",
+            "--exit-on-check-failure",
+        ]);
+        assert!(matches.get_flag("exit-on-check-failure"));
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "s3mon"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "monitor s3 buckets for missing files"
 homepage = "https://github.com/s3mon/s3mon"

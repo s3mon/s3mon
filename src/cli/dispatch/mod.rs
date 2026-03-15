@@ -28,9 +28,12 @@ pub fn handler(matches: &ArgMatches) -> Result<Action> {
         _ => OutputFormat::Prometheus,
     };
 
+    let exit_on_check_failure = matches.get_flag("exit-on-check-failure");
+
     Ok(Action::Monitor {
         config: path,
         format,
+        exit_on_check_failure,
     })
 }
 
@@ -44,9 +47,15 @@ mod tests {
         let matches = commands::new().get_matches_from(vec!["s3mon", "-c", "example.yml"]);
         let action = handler(&matches);
         assert!(action.is_ok());
-        if let Ok(Action::Monitor { config, format }) = action {
+        if let Ok(Action::Monitor {
+            config,
+            format,
+            exit_on_check_failure,
+        }) = action
+        {
             assert_eq!(config, PathBuf::from("example.yml"));
             assert_eq!(format, OutputFormat::Prometheus);
+            assert!(!exit_on_check_failure);
         }
     }
 
@@ -61,8 +70,33 @@ mod tests {
         ]);
         let action = handler(&matches);
         assert!(action.is_ok());
-        if let Ok(Action::Monitor { format, .. }) = action {
+        if let Ok(Action::Monitor {
+            format,
+            exit_on_check_failure,
+            ..
+        }) = action
+        {
             assert_eq!(format, OutputFormat::Influxdb);
+            assert!(!exit_on_check_failure);
+        }
+    }
+
+    #[test]
+    fn test_handler_monitor_exit_on_check_failure() {
+        let matches = commands::new().get_matches_from(vec![
+            "s3mon",
+            "-c",
+            "example.yml",
+            "--exit-on-check-failure",
+        ]);
+        let action = handler(&matches);
+        assert!(action.is_ok());
+        if let Ok(Action::Monitor {
+            exit_on_check_failure,
+            ..
+        }) = action
+        {
+            assert!(exit_on_check_failure);
         }
     }
 
